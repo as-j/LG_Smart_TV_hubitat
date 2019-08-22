@@ -129,7 +129,7 @@ def setPower(boolean newState) {
 def sendPowerEvent(boolean newState) {
 	state.lastPower = state.power
 	state.power = newState
-	log.debug("sendPowerEvent: sending state.power = " + (newState ? "ON":"OFF") + ((state.lastPower == state.power)?" event":" state change event"))
+	log_debug("sendPowerEvent: sending state.power = " + (newState ? "ON":"OFF") + ((state.lastPower == state.power)?" event":" state change event"))
 	sendEvent(name: "power", value: (newState?"on":"off"), displayed:false, isStateChange: ((state.lastPower == state.power)?false:true))
 	sendEvent(name: "switch", value: (newState?"on":"off"), displayed:false, isStateChange: ((state.lastPower == state.power)?false:true))
 }
@@ -438,11 +438,11 @@ def webSocketStatus(String status){
 	log_debug ("webSocketStatus: State: [${state.webSocket}]   Reported Status: [${status}]")
 
 	if(status.startsWith('failure: ')) {
-		log_warn("failure message from web socket ${status}")
+		log_debug("failure message from web socket ${status}")
 		setPaired(false)
 		if (state.power == false) { state.reconnectDelay = 30 }
 		if ((status == "failure: No route to host (Host unreachable)") || (status == "failure: connect timed out")  || status.startsWith("failure: Failed to connect") || status.startsWith("failure: sent ping but didn't receive pong")) {
-			log_warn("failure: No route/connect timeout/no pong for websocket protocol")
+			log_debug("failure: No route/connect timeout/no pong for websocket protocol")
 //			if (state.power) {
 //				sendEvent(name: "power", value: "off", displayed:false, isStateChange: true)
 //				sendEvent(name: "switch", value: "off", displayed:false, isStateChange: true)
@@ -470,7 +470,7 @@ def webSocketStatus(String status){
 		}
 	} 
 	else if (status == "status: closing"){
-		log_warn("WebSocket connection closing.")
+		log_debug("WebSocket connection closing.")
 		setPaired(false)
 		unschedule()
 		if (state.webSocket == 'initialize') {
@@ -514,7 +514,7 @@ def reconnectWebSocket() {
 	log_info("websocket reconnect - delay = ${state.reconnectDelay}")
 	//If the TV is offline, give it some time before trying to reconnect
 	state.reconnectPending = true
-	log_warn("Scheduling reconnect in ${state.reconnectDelay} seconds")
+	log_debug("Scheduling reconnect in ${state.reconnectDelay} seconds")
 	runIn(state.reconnectDelay, initialize)
 }
 
@@ -824,7 +824,7 @@ def sessionIdCommand()
     }
     catch (Exception e) 
     {
-		log.debug "Hit Exception $e on $hubAction"
+		log_debug "Hit Exception $e on $hubAction"
 	}
 }
 
@@ -850,7 +850,7 @@ def tvCommand(cmd)
     }
     catch (Exception e) 
     {
-		log.debug "Hit Exception $e on $hubAction"
+		log_debug "Hit Exception $e on $hubAction"
 	}
 }
 
@@ -858,7 +858,7 @@ def tvCommand(cmd)
 
 def appCommand()
 {
-	log.debug "Reached App Command"
+	log_debug "Reached App Command"
     def commandText = "<?xml version=\"1.0\" encoding=\"utf-8\"?><envelope><api type=\"command\"><name>AppExecute</name><auid>1</auid><appname>Netflix</appname><contentId>1</contentId></api></envelope>"
 
     def httpRequest = [
@@ -897,7 +897,7 @@ private parseHttpResult (output)
     def json = msg.json              // => any JSON included in response body, as a data structure of lists and maps
     def xml = msg.xml                // => any XML included in response body, as a document tree structure
     def data = msg.data              // => either JSON or XML in response body (whichever is specified by content-type header in response)
-	log.debug "status check ekim: status: $status"
+	log_debug "status check ekim: status: $status"
 
 	log_debug "headers: $headerMap, status: $status, body: $body, data: $json"
   
