@@ -279,6 +279,9 @@ private tvRequestPairingKey()
 
 private def parseEventMessage(String description) 
 {
+    if (!description) {
+        return
+    }
 	def event = [:]
 	def parts = description.split(',')
 	parts.each { part ->
