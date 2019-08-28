@@ -371,7 +371,7 @@ def parseWebsocketResult(String description){
 
 					// The last (valid) message sent by the TV when powering off is a subscription response for foreground app status with appId, windowId and processID all NULL
 					if (json?.payload?.subscribed) {
-						log.debug("appID: " + (description.contains("appId")?"T":"F") + "  windowId: " + (description.contains("windowId")?"T":"F") + "  processId: " + (description.contains("processId")?"T":"F"))
+						log_debug("appID: " + (description.contains("appId")?"T":"F") + "  windowId: " + (description.contains("windowId")?"T":"F") + "  processId: " + (description.contains("processId")?"T":"F"))
 						if (description.contains("appId") && description.contains("windowId") && description.contains("processId")) {
 							if ((json?.payload?.appId == null) || (json?.payload?.appId == "")) {
 								// The TV is powering off - change the power state, but leave the websocket to time out
