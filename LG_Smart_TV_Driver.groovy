@@ -800,7 +800,18 @@ def sendCommand(cmd)
         }
         state.sequenceNumber++
     }
+}
 
+def sendWebosComment(uri, payload, request, prefix)
+{
+	request = request :? "request"
+	prefix = prefix :? "command"
+	
+	def message_data = {
+		'id': state.sequenceNumber++,
+		'type': request,
+	}
+	
 }
 
 def sessionIdCommand()
