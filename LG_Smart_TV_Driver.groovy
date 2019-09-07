@@ -546,12 +546,11 @@ def webosPollStatus() {
 	}
 }
 
+//def sendWebosCommand(msgtype, uri, prefix = null, payload = null)
 
 def deviceNotification(String notifyMessage) {
     if (televisionType == "WEBOS") { 
-		if (state.paired) {
-			return sendCommand('{"type":"request","id":"command_%d","uri":"ssap://system.notifications/createToast","payload":{"message":"'+notifyMessage+'"}}')
-		}
+			return sendWebosCommand("request", "ssap://system.notifications/createToast", [message: notifyMessage])
 	}
 }
 
@@ -802,16 +801,25 @@ def sendCommand(cmd)
     }
 }
 
-def sendWebosComment(uri, payload, request, prefix)
-{
-	request = request :? "request"
-	prefix = prefix :? "command"
+def sendWebosCommand(msgtype, uri, payload = null, prefix = null)
+{	
+	prefix = prefix ?: "command"
 	
-	def message_data = {
-		'id': state.sequenceNumber++,
-		'type': request,
+	id = prefix + "_" + state.sequenceNumber++
+	
+	def message_data = [
+		'id': id,
+		'type': msgtype,
+		'uri': uri,
+	]
+	
+	if (payload) {
+		message_data.payload = payload
 	}
 	
+	def json = new groovy.json.JsonOutput().toJson(message_data)
+	
+	interfaces.webSocket.sendMessage(json)
 }
 
 def sessionIdCommand()
