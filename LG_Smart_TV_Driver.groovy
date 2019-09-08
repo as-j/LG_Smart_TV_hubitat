@@ -21,6 +21,7 @@
 public static String version()      {  return "v0.2.5"  }
 
 import groovy.json.JsonSlurper
+import groovy.transform.Field
 
 metadata {
 	definition (name: "LG Smart TV", namespace: "ekim", author: "Sam Lalor")
@@ -78,6 +79,8 @@ metadata {
 		input ("retryDelay", "enum", title: "Device Reconnect delay (WebOS Only)", options: reconnectRate, defaultValue: 60)
 	}
 }
+
+@Field static Map callbacks = [:]
 
 def log_warn(logMsg) {
 	log.warn(logMsg)
@@ -143,6 +146,9 @@ def initialize()
 {
     log_debug("LG Smart TV Driver - initialize - ip: ${televisionIp}  mac: ${televisionMac}  type: ${televisionType}  key: ${pairingKey} debug: ${debug} logText: ${descriptionText}")
     log_debug("LG Smart TV Driver - initialize - settings:" + settings.inspect())
+    
+    callbacks = [:]
+    
     state.sequenceNumber = 1
 	state.currentInput = ""
 	state.lastInput = ""
@@ -152,6 +158,8 @@ def initialize()
 	state.lastChannelDesc = ""
 	state.channelName = ""
 	state.channelData = ""
+	state.serviceList = []
+	state.inputList = []
 	sendEvent(name: "channelDesc", value: "", isStateChange: true)
 	sendEvent(name: "channel", value: "", isStateChange: true)
 	sendEvent(name: "channelName", value: "", isStateChange: true)
@@ -242,15 +250,22 @@ def parseWebsocketResult(String description){
             log_warn("parseWebsocketResult: String description not parsed")
             return
         }
-        log_info("json = ${json}"    )
+        //log_debug("json = ${json}")
     }  catch(e) {
         log.error("parseWebsocketResult: Failed to parse json e = ${e}")
         return
     }
-	if (json?.type == "registered") {
-		if (json?.id == "register_0") {
+    log_debug("Checking for callback")
+    if (callbacks[json.id]) {
+        log_debug("parseWebsocketResult: callback for json.id: " + json.id)
+        callbacks[json.id].call(json)
+        callbacks[json.id] = null
+        return // If there's a call back don't do rest of this
+    }
+	if (json.type == "registered") {
+		if (json.id == "register_0") {
 			// this is a response to our pairing request - we are registered
-			if (!(json?.payload["client-key"] == null)){
+			if (!(json.payload["client-key"] == null)){
 				pKey = json.payload["client-key"]
 				log_warn("parseWebsocketResult: received registered client-key: ${pKey}")
 				state.pairingKey = pKey
@@ -272,7 +287,7 @@ def parseWebsocketResult(String description){
         }
     }
     if (json?.type == "response") {
-        if (json?.id == "register_0") {
+        if (json.id == "register_0") {
             // this is a response to our pairing request - we are waiting for user authorization at the TV
             if (!(json?.payload["client-key"] == null)){
                 pKey = json.payload["client-key"]
@@ -286,8 +301,8 @@ def parseWebsocketResult(String description){
                 state.registerPending = false
             }
         }
-        if (json?.id.startsWith("command_")) {
-            if (json?.payload?.returnValue == true) {
+        if (json.id.startsWith("command_")) {
+            if (json.payload?.returnValue == true) {
                 //we received an afirmative response
                 webosPollStatus()
             }
@@ -546,12 +561,21 @@ def webosPollStatus() {
 	}
 }
 
-//def sendWebosCommand(msgtype, uri, prefix = null, payload = null)
+//def sendWebosCommand(msgtype, uri, payload = null, prefix = null)
+
+def genericHandler(json) {
+	log_debug("genericHandler: got json: ${json}")
+}
 
 def deviceNotification(String notifyMessage) {
-    if (televisionType == "WEBOS") { 
-			return sendWebosCommand("request", "ssap://system.notifications/createToast", [message: notifyMessage])
-	}
+	if (televisionType != "WEBOS") return
+	
+	return sendWebosCommand(msgtype: "request", 
+	                        uri: "system.notifications/createToast",
+	                        payload: [message: notifyMessage],
+	                        callback: {
+		log_debug("Got a callback for the command ${it.id}")
+	})
 }
 
 def on()
@@ -745,21 +769,72 @@ def myApps()
     }
 }
 
+def play()
+{    
+	sendWebosCommand(uri: "media.controls/play")
+}
+
+def pause()
+{    
+	sendWebosCommand(uri: "media.controls/pause")
+}
+
 def ok()
 {
     if (televisionType == "NETCAST") { 
         return sendCommand(20)
-    } else {
-        sendCommand('{"type":"request","id":"command_%d","uri":"com.webos.service.ime/sendEnterKey"}')
-	}
+    }
+    
+	return sendWebosCommand(uri: "com.webos.service.ime/sendEnterKey")
 }
 
 def home()
 {
     if (televisionType == "NETCAST") { 
         return sendCommand(21)
-    } else {
-    }
+    } 
+
+    log_debug("OLD Inputs: ${state.inputList} total length: ${state.toString().length()}")
+    
+    state.remove('inputList')
+    state.inputList = []
+    sendWebosCommand(uri: 'tv/getExternalInputList', callback: { json ->
+        json?.payload?.devices?.each { device ->
+            def typel = device.label.getClass()
+            def typea = device.appId.getClass()
+            log_debug("Found: ${device?.label} types: ${typel} ${typea} $device")
+            if (device?.label && (device?.favorite || device?.connected)) {
+                state.inputList << ["${device.label}": device.appId]
+            }
+        }
+        log_debug("Inputs: ${state.inputList}")
+    })
+
+    state.remove('serviceList')
+    state.serviceList = []
+    sendWebosCommand(uri: 'api/getServiceList', callback: { json ->
+        log_debug("getServiceList: ${json?.payload}")
+        json?.payload?.services.each { service ->
+            state.serviceList << service?.name
+        }
+        log_debug("Services: ${state.serviceList}")
+    })
+    /* Insuficient perms to call listLaunchPoints
+    sendWebosCommand(uri: 'com.webos.applicationManager/listLaunchPoints', callback: { json->
+        log_debug("listLaunchPoints: ${json?.payload}")
+    })
+    */
+/*
+    sendWebosCommand(uri: 'com.webos.service.update/getCurrentSWInformation', callback: {
+        log_debug("getCurrentSWInfo: ${it}")
+    })
+    sendWebosCommand(uri: 'api/getServiceList', callback: {
+        og_debug("getServiceList: ${it}")
+    })
+    sendWebosCommand(uri: 'com.webos.applicationManager/listLaunchPoints', callback: {
+        log_debug("listLaunchPoints: ${it}")
+    })
+*/
 }
 
 def wake() {
@@ -801,25 +876,33 @@ def sendCommand(cmd)
     }
 }
 
-def sendWebosCommand(msgtype, uri, payload = null, prefix = null)
-{	
-	prefix = prefix ?: "command"
+def sendWebosCommand(Map params) 
+{
+	assert params.uri
 	
-	id = prefix + "_" + state.sequenceNumber++
+	def id = (params.prefix ?: "command") + "_" + state.sequenceNumber++
+	
+	def cb = params.callback ?: { genericHandler(it) }
 	
 	def message_data = [
 		'id': id,
-		'type': msgtype,
-		'uri': uri,
+		'type': params.msgtype ?: "request",
+		'uri': "ssap://" + params.uri,
 	]
 	
-	if (payload) {
-		message_data.payload = payload
+	if (params.payload) {
+		message_data.payload = params.payload
 	}
 	
 	def json = new groovy.json.JsonOutput().toJson(message_data)
 	
+	log_debug("Sending: " + json)
+	
+	callbacks[id] = cb
+	
 	interfaces.webSocket.sendMessage(json)
+	
+	log_debug("sendWebosCommand sending json: ${json}")
 }
 
 def sessionIdCommand()
