@@ -21,10 +21,11 @@
 public static String version()      {  return "v0.2.5"  }
 
 import groovy.json.JsonSlurper
+import groovy.json.JsonOutput
 import groovy.transform.Field
 
 metadata {
-	definition (name: "LG Smart TV", namespace: "ekim", author: "Sam Lalor")
+	definition (name: "LG Smart TV", namespace: "asj", author: "Andrew Stanley-Jones")
 	{
 		capability "Initialize"
 		capability "TV"
@@ -106,22 +107,114 @@ def installed()
 }
 
 def webosRegister() {
-	// prove we are registered
     state.pairFailCount = 0
-    state.registerPending = true
-//	def msg = '{"type":"register","id":"register_0","payload":{"forcePairing":false,"pairingType":"PIN","client-key":"' + pairingKey + '","manifest":{"manifestVersion":1,"appVersion":"1.1","signed":{"created":"20140509","appId":"com.lge.test","vendorId":"com.lge","localizedAppNames":{"":"LG Remote App","ko-KR":"??? ?","zxx-XX":"?? R??ot? A??"},"localizedVendorNames":{"":"LG Electronics"},"permissions":["TEST_SECURE","CONTROL_INPUT_TEXT","CONTROL_MOUSE_AND_KEYBOARD","READ_INSTALLED_APPS","READ_LGE_SDX","READ_NOTIFICATIONS","SEARCH","WRITE_SETTINGS","WRITE_NOTIFICATION_ALERT","CONTROL_POWER","READ_CURRENT_CHANNEL","READ_RUNNING_APPS","READ_UPDATE_INFO","UPDATE_FROM_REMOTE_APP","READ_LGE_TV_INPUT_EVENTS","READ_TV_CURRENT_TIME"],"serial":"2f930e2d2cfe083771f68e4fe7bb07"},"permissions":["LAUNCH","LAUNCH_WEBAPP","APP_TO_APP","CLOSE","TEST_OPEN","TEST_PROTECTED","CONTROL_AUDIO","CONTROL_DISPLAY","CONTROL_INPUT_JOYSTICK","CONTROL_INPUT_MEDIA_RECORDING","CONTROL_INPUT_MEDIA_PLAYBACK","CONTROL_INPUT_TV","CONTROL_POWER","READ_APP_STATUS","READ_CURRENT_CHANNEL","READ_INPUT_DEVICE_LIST","READ_NETWORK_STATE","READ_RUNNING_APPS","READ_TV_CHANNEL_LIST","WRITE_NOTIFICATION_TOAST","READ_POWER_STATE","READ_COUNTRY_INFO"],"signatures":[{"signatureVersion":1,"signature":"eyJhbGdvcml0aG0iOiJSU0EtU0hBMjU2Iiwia2V5SWQiOiJ0ZXN0LXNpZ25pbmctY2VydCIsInNpZ25hdHVyZVZlcnNpb24iOjF9.hrVRgjCwXVvE2OOSpDZ58hR+59aFNwYDyjQgKk3auukd7pcegmE2CzPCa0bJ0ZsRAcKkCTJrWo5iDzNhMBWRyaMOv5zWSrthlf7G128qvIlpMT0YNY+n/FaOHE73uLrS/g7swl3/qH/BGFG2Hu4RlL48eb3lLKqTt2xKHdCs6Cd4RMfJPYnzgvI4BNrFUKsjkcu+WD4OO2A27Pq1n50cMchmcaXadJhGrOqH5YmHdOCj5NSHzJYrsW0HPlpuAx/ECMeIZYDh6RMqaFM2DXzdKX9NmmyqzJ3o/0lkk/N97gfVRLW5hA29yeAwaCViZNCP8iC9aO0q9fQojoa7NQnAtw=="}]}}}'
-	def msg = '{"type":"register","id":"register_0","payload":{"forcePairing":false,"pairingType":"PROMPT","client-key":"' + pairingKey + '","manifest":{"manifestVersion":1,"appVersion":"1.1","signed":{"created":"20140509","appId":"com.lge.test","vendorId":"com.lge","localizedAppNames":{"":"LG Remote App","ko-KR":"??? ?","zxx-XX":"?? R??ot? A??"},"localizedVendorNames":{"":"LG Electronics"},"permissions":["TEST_SECURE","CONTROL_INPUT_TEXT","CONTROL_MOUSE_AND_KEYBOARD","READ_INSTALLED_APPS","READ_LGE_SDX","READ_NOTIFICATIONS","SEARCH","WRITE_SETTINGS","WRITE_NOTIFICATION_ALERT","CONTROL_POWER","READ_CURRENT_CHANNEL","READ_RUNNING_APPS","READ_UPDATE_INFO","UPDATE_FROM_REMOTE_APP","READ_LGE_TV_INPUT_EVENTS","READ_TV_CURRENT_TIME"],"serial":"2f930e2d2cfe083771f68e4fe7bb07"},"permissions":["LAUNCH","LAUNCH_WEBAPP","APP_TO_APP","CLOSE","TEST_OPEN","TEST_PROTECTED","CONTROL_AUDIO","CONTROL_DISPLAY","CONTROL_INPUT_JOYSTICK","CONTROL_INPUT_MEDIA_RECORDING","CONTROL_INPUT_MEDIA_PLAYBACK","CONTROL_INPUT_TV","CONTROL_POWER","READ_APP_STATUS","READ_CURRENT_CHANNEL","READ_INPUT_DEVICE_LIST","READ_NETWORK_STATE","READ_RUNNING_APPS","READ_TV_CHANNEL_LIST","WRITE_NOTIFICATION_TOAST","READ_POWER_STATE","READ_COUNTRY_INFO"],"signatures":[{"signatureVersion":1,"signature":"eyJhbGdvcml0aG0iOiJSU0EtU0hBMjU2Iiwia2V5SWQiOiJ0ZXN0LXNpZ25pbmctY2VydCIsInNpZ25hdHVyZVZlcnNpb24iOjF9.hrVRgjCwXVvE2OOSpDZ58hR+59aFNwYDyjQgKk3auukd7pcegmE2CzPCa0bJ0ZsRAcKkCTJrWo5iDzNhMBWRyaMOv5zWSrthlf7G128qvIlpMT0YNY+n/FaOHE73uLrS/g7swl3/qH/BGFG2Hu4RlL48eb3lLKqTt2xKHdCs6Cd4RMfJPYnzgvI4BNrFUKsjkcu+WD4OO2A27Pq1n50cMchmcaXadJhGrOqH5YmHdOCj5NSHzJYrsW0HPlpuAx/ECMeIZYDh6RMqaFM2DXzdKX9NmmyqzJ3o/0lkk/N97gfVRLW5hA29yeAwaCViZNCP8iC9aO0q9fQojoa7NQnAtw=="}]}}}'
-	log_debug("webosRegister: sending Auth request: ${msg}")
-	interfaces.webSocket.sendMessage(msg)
+
+    def payload = [
+      pairingType: "PROMPT",
+      forcePairing: false,
+      'client-key': state?.pairingKey,
+      manifest: [
+        appVersion: "1.1",
+        signed: [
+          localizedVendorNames: [
+             "": "LG Electronics",
+          ],
+          appId: "com.lge.test",
+          created: "20140509",
+          permissions: [
+            "TEST_SECURE",
+            "CONTROL_INPUT_TEXT",
+            "CONTROL_MOUSE_AND_KEYBOARD",
+            "READ_INSTALLED_APPS",
+            "READ_LGE_SDX",
+            "READ_NOTIFICATIONS",
+            "SEARCH",
+            "WRITE_SETTINGS",
+            "WRITE_NOTIFICATION_ALERT",
+            "CONTROL_POWER",
+            "READ_CURRENT_CHANNEL",
+            "READ_RUNNING_APPS",
+            "READ_UPDATE_INFO",
+            "UPDATE_FROM_REMOTE_APP",
+            "READ_LGE_TV_INPUT_EVENTS",
+            "READ_TV_CURRENT_TIME",
+          ],
+          localizedAppNames: [
+             "": "LG Remote App",
+          ],
+          vendorId: "com.lge",
+          serial: "2f930e2d2cfe083771f68e4fe7bb07",
+        ],
+        permissions: [
+          "LAUNCH",
+          "LAUNCH_WEBAPP",
+          "APP_TO_APP",
+          "CLOSE",
+          "TEST_OPEN",
+          "TEST_PROTECTED",
+          "CONTROL_AUDIO",
+          "CONTROL_DISPLAY",
+          "CONTROL_INPUT_JOYSTICK",
+          "CONTROL_INPUT_MEDIA_RECORDING",
+          "CONTROL_INPUT_MEDIA_PLAYBACK",
+          "CONTROL_INPUT_TV",
+          "CONTROL_POWER",
+          "READ_APP_STATUS",
+          "READ_CURRENT_CHANNEL",
+          "READ_INPUT_DEVICE_LIST",
+          "READ_NETWORK_STATE",
+          "READ_RUNNING_APPS",
+          "READ_TV_CHANNEL_LIST",
+          "WRITE_NOTIFICATION_TOAST",
+          "READ_POWER_STATE",
+          "READ_COUNTRY_INFO",
+        ],
+        manifestVersion: 1,
+        signatures: [
+          [
+            signatureVersion: 1,
+            signature: "eyJhbGdvcml0aG0iOiJSU0EtU0hBMjU2Iiwia2V5SWQiOiJ0ZXN0LXNpZ25pbmctY2VydCIsInNpZ25hdHVyZVZlcnNpb24iOjF9.hrVRgjCwXVvE2OOSpDZ58hR+59aFNwYDyjQgKk3auukd7pcegmE2CzPCa0bJ0ZsRAcKkCTJrWo5iDzNhMBWRyaMOv5zWSrthlf7G128qvIlpMT0YNY+n/FaOHE73uLrS/g7swl3/qH/BGFG2Hu4RlL48eb3lLKqTt2xKHdCs6Cd4RMfJPYnzgvI4BNrFUKsjkcu+WD4OO2A27Pq1n50cMchmcaXadJhGrOqH5YmHdOCj5NSHzJYrsW0HPlpuAx/ECMeIZYDh6RMqaFM2DXzdKX9NmmyqzJ3o/0lkk/N97gfVRLW5hA29yeAwaCViZNCP8iC9aO0q9fQojoa7NQnAtw==",
+          ],
+        ]
+      ]
+    ]
+
+    sendWebosCommand(prefix: "register", type: "register", payload: payload, callback: { json ->
+        log_debug("webosRegister: got json: ${json}")
+        if (json?.type == "registered") {
+            pKey = json.payload["client-key"]
+            if (pKey != null) {
+                log_warn("parseWebsocketResult: received registered client-key: ${pKey}")
+                state.pairingKey = pKey
+                settings.pairingKey = pKey
+                device.updateSetting("pairingKey",[type:"text", value:"${pKey}"])
+                pairingKey = pKey
+                setPaired(true)
+                // Hello doesn't seem to do anything?
+                //runInMillis(10, sendHello)
+                runInMillis(10, sendRequestInfo)
+                runInMillis(50, webosSubscribeToStatus)
+
+            }
+            return true
+        } else if (json?.type == "response") {
+            return false
+        }
+    })
 }
 
-def webosStartPairing() {
-    state.pairFailCount = 0
-    state.registerPending = true
-//	def registerCMD = '{"type":"register","id":"register_0","payload":{"forcePairing":true,"pairingType":"PIN","client-key":"","manifest":{"manifestVersion":1,"appVersion":"1.1","signed":{"created":"20140509","appId":"com.lge.test","vendorId":"com.lge","localizedAppNames":{"":"LG Remote App","ko-KR":"??? ?","zxx-XX":"?? R??ot? A??"},"localizedVendorNames":{"":"LG Electronics"},"permissions":["TEST_SECURE","CONTROL_INPUT_TEXT","CONTROL_MOUSE_AND_KEYBOARD","READ_INSTALLED_APPS","READ_LGE_SDX","READ_NOTIFICATIONS","SEARCH","WRITE_SETTINGS","WRITE_NOTIFICATION_ALERT","CONTROL_POWER","READ_CURRENT_CHANNEL","READ_RUNNING_APPS","READ_UPDATE_INFO","UPDATE_FROM_REMOTE_APP","READ_LGE_TV_INPUT_EVENTS","READ_TV_CURRENT_TIME"],"serial":"2f930e2d2cfe083771f68e4fe7bb07"},"permissions":["LAUNCH","LAUNCH_WEBAPP","APP_TO_APP","CLOSE","TEST_OPEN","TEST_PROTECTED","CONTROL_AUDIO","CONTROL_DISPLAY","CONTROL_INPUT_JOYSTICK","CONTROL_INPUT_MEDIA_RECORDING","CONTROL_INPUT_MEDIA_PLAYBACK","CONTROL_INPUT_TV","CONTROL_POWER","READ_APP_STATUS","READ_CURRENT_CHANNEL","READ_INPUT_DEVICE_LIST","READ_NETWORK_STATE","READ_RUNNING_APPS","READ_TV_CHANNEL_LIST","WRITE_NOTIFICATION_TOAST","READ_POWER_STATE","READ_COUNTRY_INFO"],"signatures":[{"signatureVersion":1,"signature":"eyJhbGdvcml0aG0iOiJSU0EtU0hBMjU2Iiwia2V5SWQiOiJ0ZXN0LXNpZ25pbmctY2VydCIsInNpZ25hdHVyZVZlcnNpb24iOjF9.hrVRgjCwXVvE2OOSpDZ58hR+59aFNwYDyjQgKk3auukd7pcegmE2CzPCa0bJ0ZsRAcKkCTJrWo5iDzNhMBWRyaMOv5zWSrthlf7G128qvIlpMT0YNY+n/FaOHE73uLrS/g7swl3/qH/BGFG2Hu4RlL48eb3lLKqTt2xKHdCs6Cd4RMfJPYnzgvI4BNrFUKsjkcu+WD4OO2A27Pq1n50cMchmcaXadJhGrOqH5YmHdOCj5NSHzJYrsW0HPlpuAx/ECMeIZYDh6RMqaFM2DXzdKX9NmmyqzJ3o/0lkk/N97gfVRLW5hA29yeAwaCViZNCP8iC9aO0q9fQojoa7NQnAtw=="}]}}}'
-	def registerCMD = '{"type":"register","id":"register_0","payload":{"forcePairing":true,"pairingType":"PROMPT","client-key":"","manifest":{"manifestVersion":1,"appVersion":"1.1","signed":{"created":"20140509","appId":"com.lge.test","vendorId":"com.lge","localizedAppNames":{"":"LG Remote App","ko-KR":"??? ?","zxx-XX":"?? R??ot? A??"},"localizedVendorNames":{"":"LG Electronics"},"permissions":["TEST_SECURE","CONTROL_INPUT_TEXT","CONTROL_MOUSE_AND_KEYBOARD","READ_INSTALLED_APPS","READ_LGE_SDX","READ_NOTIFICATIONS","SEARCH","WRITE_SETTINGS","WRITE_NOTIFICATION_ALERT","CONTROL_POWER","READ_CURRENT_CHANNEL","READ_RUNNING_APPS","READ_UPDATE_INFO","UPDATE_FROM_REMOTE_APP","READ_LGE_TV_INPUT_EVENTS","READ_TV_CURRENT_TIME"],"serial":"2f930e2d2cfe083771f68e4fe7bb07"},"permissions":["LAUNCH","LAUNCH_WEBAPP","APP_TO_APP","CLOSE","TEST_OPEN","TEST_PROTECTED","CONTROL_AUDIO","CONTROL_DISPLAY","CONTROL_INPUT_JOYSTICK","CONTROL_INPUT_MEDIA_RECORDING","CONTROL_INPUT_MEDIA_PLAYBACK","CONTROL_INPUT_TV","CONTROL_POWER","READ_APP_STATUS","READ_CURRENT_CHANNEL","READ_INPUT_DEVICE_LIST","READ_NETWORK_STATE","READ_RUNNING_APPS","READ_TV_CHANNEL_LIST","WRITE_NOTIFICATION_TOAST","READ_POWER_STATE","READ_COUNTRY_INFO"],"signatures":[{"signatureVersion":1,"signature":"eyJhbGdvcml0aG0iOiJSU0EtU0hBMjU2Iiwia2V5SWQiOiJ0ZXN0LXNpZ25pbmctY2VydCIsInNpZ25hdHVyZVZlcnNpb24iOjF9.hrVRgjCwXVvE2OOSpDZ58hR+59aFNwYDyjQgKk3auukd7pcegmE2CzPCa0bJ0ZsRAcKkCTJrWo5iDzNhMBWRyaMOv5zWSrthlf7G128qvIlpMT0YNY+n/FaOHE73uLrS/g7swl3/qH/BGFG2Hu4RlL48eb3lLKqTt2xKHdCs6Cd4RMfJPYnzgvI4BNrFUKsjkcu+WD4OO2A27Pq1n50cMchmcaXadJhGrOqH5YmHdOCj5NSHzJYrsW0HPlpuAx/ECMeIZYDh6RMqaFM2DXzdKX9NmmyqzJ3o/0lkk/N97gfVRLW5hA29yeAwaCViZNCP8iC9aO0q9fQojoa7NQnAtw=="}]}}}'
-    log_debug("webosStartPairing: requesting Authorization")
-    interfaces.webSocket.sendMessage(registerCMD)
+def sendHello() {
+    log_debug("parseWebsocketResult: requesting HELLO packet")
+    sendWebosCommand(type: "hello", prefix: "status", callback: { json_status ->
+        log.debug("Got Hello: ${json_status}")
+    })
+}
+
+def sendRequestInfo() {
+    log_info("parseWebsocketResult: requesting SystemInfo packet")
+    sendWebosCommand(id: "status", uri: "system/getSystemInfo", callback: { json_status ->
+        parseStatus(state, json_status)
+    })
 }
 
 def setPower(boolean newState) {
@@ -245,7 +338,7 @@ def parseWebsocketResult(String description){
 	log_debug("parseWebsocketResult")
 	def json = null
     try{
-        json = new groovy.json.JsonSlurper().parseText(description)
+        json = new JsonSlurper().parseText(description)
         if(json == null){
             log_warn("parseWebsocketResult: String description not parsed")
             return
@@ -258,35 +351,16 @@ def parseWebsocketResult(String description){
     log_debug("Checking for callback")
     if (callbacks[json.id]) {
         log_debug("parseWebsocketResult: callback for json.id: " + json.id)
-        callbacks[json.id].call(json)
-        callbacks[json.id] = null
-        return // If there's a call back don't do rest of this
-    }
-	if (json.type == "registered") {
-		if (json.id == "register_0") {
-			// this is a response to our pairing request - we are registered
-			if (!(json.payload["client-key"] == null)){
-				pKey = json.payload["client-key"]
-				log_warn("parseWebsocketResult: received registered client-key: ${pKey}")
-				state.pairingKey = pKey
-				settings.pairingKey = pKey
-				device.updateSetting("pairingKey",[type:"text", value:"${pKey}"])
-				pairingKey = pKey
-				log_warn("parseWebsocketResult:      set registered client-key: ${pairingKey}")
-				setPaired(true)
-				state.registerPending = false
-				// start running the poll routine for ongoning status updates
-				log_info("parseWebsocketResult:      requesting HELLO packet")
-				sendCommand('{"type":"hello","id":"status_%d"}')
-				log_info("parseWebsocketResult:      requesting SystemInfo packet")
-				sendCommand('{"type":"request","id":"status_%d","uri":"ssap://system/getSystemInfo"}')
-//				log_warn("parseWebsocketResult:      requesting CurrentSWInformation packet")
-//				sendCommand('{"type":"request","id":"status_%d","uri":"ssap://com.webos.service.update/getCurrentSWInformation"}')
-				webosSubscribeToStatus()
-            }
+        callbacks[json.id].delegate = this
+        callbacks[json.id].resolveStrategy = Closure.DELEGATE_FIRST
+        def done = callbacks[json.id].call(json)
+        if ((done instanceof Boolean) && (done == false)) {
+            log_debug("Callback[${json.id}]: being kept, done is false")
+        } else {
+            callbacks[json.id] = null
         }
-    }
-    if (json?.type == "response") {
+    } else if (json.type == "registered") {
+    } else if (json?.type == "response") {
         if (json.id == "register_0") {
             // this is a response to our pairing request - we are waiting for user authorization at the TV
             if (!(json?.payload["client-key"] == null)){
@@ -298,7 +372,6 @@ def parseWebsocketResult(String description){
 				device.updateSetting("pairingKey",[type:"text", value:"${pKey}"])
                 log_warn("parseWebsocketResult:      set response client-key: ${pairingKey}")
                 setPaired(true)
-                state.registerPending = false
             }
         }
         if (json.id.startsWith("command_")) {
@@ -307,112 +380,7 @@ def parseWebsocketResult(String description){
                 webosPollStatus()
             }
         }
-		if (json?.id.startsWith("status_")) {
-			def rResp = false
-			if ((state.power == false) && !(json?.payload?.subscribed == true)) {
-				// when TV has indicated power off, do not process status messages unless they are subscriptions
-					log_warn("ignoring unsubscribed status updated during power off...")
-			} else {
-				if (json?.payload?.channel) { 
-					state.lastChannelDesc = state.channelDesc
-					state.channel = json?.payload?.channel?.channelNumber
-					state.channelDesc = json?.payload?.channel?.channelNumber + " ("+ json?.payload?.channel?.majorNumber + "." + json?.payload?.channel?.minorNumber + "): " + json?.payload?.channel?.channelName
-					def cChange = ((state.lastChannelDesc == state.channelDesc)?false:true)
-					def cData = json?.payload?.channel
-					cData << [channelDesc: state.channelDesc]
-					if (!channelDetail) {
-						cData = [
-							channelDesc: state.channelDesc,
-							channelMode: json?.payload?.channel?.channelMode,
-							channelNumber: json?.payload?.channel?.channelNumber,
-							majorNumber: json?.payload?.channel?.majorNumber,
-							minorNumber: json?.payload?.channel?.minorNumber,
-							channelName: json?.payload?.channel?.channelName,
-						]
-					}
-					sendEvent(name: "channelDesc", value: state.channelDesc, displayed:false, isStateChange: cChange)
-					sendEvent(name: "channel", value: state.channel, displayed:false, isStateChange: cChange)
-					sendEvent(name: "channelName", value: json?.payload?.channel?.channelName, displayed:false, isStateChange: cChange)
-					sendEvent(name: "channelData", value: cData, displayed:false, isStateChange: cChange)
-					log_info("state.channelDesc = ${state.channelDesc}")
-					rResp = true
-				}
-				if (json?.payload?.returnValue == true) {
-					if (json?.payload?.volume) { 
-						state.lastVolume = state.Volume
-						state.Volume = json?.payload?.volume
-						sendEvent(name: "volume", value: state.Volume, displayed:false, isStateChange: ((state.lastVolume == state.Volume)?false:true))
-						log_info("state.Volume = ${state.Volume}")
-						rResp = true
-					}
-					if (json?.payload?.mute != null) { 
-						state.lastMute = state.Mute
-						state.Mute = json?.payload?.mute
-						sendEvent(name: "mute", value: state.Mute, displayed:false, isStateChange: ((state.lastMute == state.Mute)?false:true))
-						log_info("state.Mute = ${state.Mute}")
-						rResp = true
-					}
-					if (json?.payload?.modelName) { 
-						state.ModelName = json?.payload?.modelName
-						log_info("state.ModelName = ${state.ModelName}")
-						rResp = true
-					} 
-					if (json?.payload?.appId) { 
-						state.lastInput = state.CurrentInput
-						state.CurrentInput = json?.payload?.appId
-						log.info("state.CurrentInput = ${state.CurrentInput}")
-						sendEvent(name: "CurrentInput", value: state.CurrentInput, displayed:false, isStateChange: ((state.lastInput == state.CurrentInput)?false:true))
-						if (!(state.lastInput == state.CurrentInput) && (state.CurrentInput == "com.webos.app.livetv")) {
-							sendCommand('{"type":"subscribe","id":"status_channel_0","uri":"ssap://tv/getChannelProgramInfo"}')
-						}
-						if ((state.lastInput == "com.webos.app.livetv") && !(state.CurrentInput == "com.webos.app.livetv")) {
-							sendCommand('{"type":"unsubscribe","id":"status_channel_0","uri":"ssap://tv/getChannelProgramInfo"}')
-							state.channel = ""
-							state.lastChannel = ""
-							state.channelDesc = ""
-							state.lastChannelDesc = ""
-							state.channelName = ""
-							state.channelData = ""
-							sendEvent(name: "channelDesc", value: "", displayed:false, isStateChange: true)
-							sendEvent(name: "channel", value: "", displayed:false, isStateChange: true)
-							sendEvent(name: "channelName", value: "", displayed:false, isStateChange: true)
-							sendEvent(name: "channelData", value: "", displayed:false, isStateChange: true)
-						}
-						rResp = true
-        	        }
-					if (rResp == true) {
-						sendPowerEvent(true)
-					}
-
-					// The last (valid) message sent by the TV when powering off is a subscription response for foreground app status with appId, windowId and processID all NULL
-					if (json?.payload?.subscribed) {
-						log_debug("appID: " + (description.contains("appId")?"T":"F") + "  windowId: " + (description.contains("windowId")?"T":"F") + "  processId: " + (description.contains("processId")?"T":"F"))
-						if (description.contains("appId") && description.contains("windowId") && description.contains("processId")) {
-							if ((json?.payload?.appId == null) || (json?.payload?.appId == "")) {
-								// The TV is powering off - change the power state, but leave the websocket to time out
-								sendPowerEvent(false)
-								state.CurrentInput = ""
-								state.lastInput = ""
-								state.channel = ""
-								state.lastChannel = ""
-								state.channelDesc = ""
-								state.lastChannelDesc = ""
-								state.channelName = ""
-								state.channelData = ""
-								sendEvent(name: "channelDesc", value: "", displayed:false, isStateChange: true)
-								sendEvent(name: "channel", value: "", displayed:false, isStateChange: true)
-								sendEvent(name: "channelName", value: "", displayed:false, isStateChange: true)
-								sendEvent(name: "channelData", value: "", displayed:false, isStateChange: true)
-								sendEvent(name: "CurrentInput", value: "", displayed:false, isStateChange: true)
-								log.warn("Received POWER DOWN notification.")
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-	if (json?.type == "hello") {
+	} else if (json?.type == "hello") {
 		if (json?.payload?.protocolVersion) {
 		}
 		if (json?.payload?.deviceOS) {
@@ -427,8 +395,7 @@ def parseWebsocketResult(String description){
 		if (json?.payload?.deviceUUID) {
 			state.deviceUUID = json?.payload?.deviceUUID
 		}
-	}
-	if (json?.type == "error") {
+	} else if (json?.type == "error") {
 		if (json?.id == "register_0") {
 			if (json?.error.take(3) == "403") {
 				// 403 error cancels the pairing process
@@ -436,13 +403,13 @@ def parseWebsocketResult(String description){
 				setPaired(false)
 				state.pairFailCount = state.pairFailCount ? state.pairFailCount + 1 : 1
 				log_info("parseWebsocketResult: received register_0 error: ${json.error} fail count: ${state.pairFailCount}")
-				if (state.pairFailCount < 6) { webosStartPairing() }
+				if (state.pairFailCount < 6) { webosRegister() }
 			}
 		} else {
 			if (json?.error.take(3) == "401") {
 				log_info("parseWebsocketResult: received error: ${json.error}")
-				if (state.registerPending == false) { webosStartPairing() }
-				//webosStartPairing()
+				//if (state.registerPending == false) { webosRegister() }
+				//webosRegister()
 			}
 		}
 	}
@@ -478,7 +445,7 @@ def webSocketStatus(String status){
 		state.reconnectDelay = 1
 		state.webSocket = "open"
 		if ((pairingKey == null) || (pairingKey == "")) {
-			webosStartPairing()
+			webosRegister()
 		} else {
 			setPaired(true)
 			webosRegister()
@@ -544,24 +511,18 @@ def webosSubscribeToStatus() {
 }
 
 def webosPollStatus() {
-	if (!state.registerPending) {
-		log_debug("webosPollStatus - paired = "+(state.paired?"TRUE":"FALSE")+"  currentInput = "+state.CurrentInput)
-		if (state.paired) {
-			// send webos commands to poll the TV status
-			log_debug("webosPollStatus: requesting device status...")
-			sendCommand('{"type":"request","id":"status_%d","uri":"ssap://audio/getStatus"}')
-			//sendCommand('{"type":"request","id":"status_%d","uri":"ssap://tv/getExternalInputList"}')
-			sendCommand('{"type":"request","id":"status_%d","uri":"ssap://com.webos.applicationManager/getForegroundAppInfo"}')
-			if (state.CurrentInput == "com.webos.app.livetv") {
-				sendCommand('{"type":"request","id":"status_%d","uri":"ssap://tv/getChannelProgramInfo"}')
-			}
-		} else {
-			log_debug("webosPollStatus: Nothing to do...")
-		}
-	}
+    log_debug("webosPollStatus - paired = "+(state.paired?"TRUE":"FALSE")+"  currentInput = "+state.CurrentInput)
+    if (state.paired) {
+        // send webos commands to poll the TV status
+        log_debug("webosPollStatus: requesting device status...")
+        sendCommand('{"type":"request","id":"status_%d","uri":"ssap://audio/getStatus"}')
+        //sendCommand('{"type":"request","id":"status_%d","uri":"ssap://tv/getExternalInputList"}')
+        sendCommand('{"type":"request","id":"status_%d","uri":"ssap://com.webos.applicationManager/getForegroundAppInfo"}')
+        if (state.CurrentInput == "com.webos.app.livetv") {
+            sendCommand('{"type":"request","id":"status_%d","uri":"ssap://tv/getChannelProgramInfo"}')
+        }
+    }
 }
-
-//def sendWebosCommand(msgtype, uri, payload = null, prefix = null)
 
 def genericHandler(json) {
 	log_debug("genericHandler: got json: ${json}")
@@ -570,8 +531,7 @@ def genericHandler(json) {
 def deviceNotification(String notifyMessage) {
 	if (televisionType != "WEBOS") return
 	
-	return sendWebosCommand(msgtype: "request", 
-	                        uri: "system.notifications/createToast",
+	return sendWebosCommand(uri: "system.notifications/createToast",
 	                        payload: [message: notifyMessage],
 	                        callback: {
 		log_debug("Got a callback for the command ${it.id}")
@@ -661,9 +621,11 @@ def refresh()
 	    return sessionIdCommand()
 	} else {
 		log_info("refresh: refreshing System Info")
-		sendCommand('{"type":"hello","id":"status_%d"}')
-		sendCommand('{"type":"request","id":"status_%d","uri":"ssap://system/getSystemInfo"}')
-		return webosPollStatus()
+        //initialize()
+        webosRegister()
+		//sendCommand('{"type":"hello","id":"status_%d"}')
+		//sendCommand('{"type":"request","id":"status_%d","uri":"ssap://system/getSystemInfo"}')
+		//return webosPollStatus()
 	}
 }
 
@@ -792,19 +754,20 @@ def home()
 {
     if (televisionType == "NETCAST") { 
         return sendCommand(21)
-    } 
+    }
 
     log_debug("OLD Inputs: ${state.inputList} total length: ${state.toString().length()}")
-    
+
     state.remove('inputList')
     state.inputList = []
+    state.inputListStr = ""
     sendWebosCommand(uri: 'tv/getExternalInputList', callback: { json ->
         json?.payload?.devices?.each { device ->
-            def typel = device.label.getClass()
-            def typea = device.appId.getClass()
-            log_debug("Found: ${device?.label} types: ${typel} ${typea} $device")
+            log_debug("Found: ${device?.label} $device")
             if (device?.label && (device?.favorite || device?.connected)) {
                 state.inputList << ["${device.label}": device.appId]
+                if (state.inputListStr != "") state.inputListStr = ", "
+                state.inputListStr += device.local
             }
         }
         log_debug("Inputs: ${state.inputList}")
@@ -819,22 +782,17 @@ def home()
         }
         log_debug("Services: ${state.serviceList}")
     })
-    /* Insuficient perms to call listLaunchPoints
     sendWebosCommand(uri: 'com.webos.applicationManager/listLaunchPoints', callback: { json->
         log_debug("listLaunchPoints: ${json?.payload}")
     })
-    */
-/*
+    /* Insuficient perms to call listLaunchPoints
     sendWebosCommand(uri: 'com.webos.service.update/getCurrentSWInformation', callback: {
         log_debug("getCurrentSWInfo: ${it}")
     })
-    sendWebosCommand(uri: 'api/getServiceList', callback: {
-        og_debug("getServiceList: ${it}")
-    })
+*/
     sendWebosCommand(uri: 'com.webos.applicationManager/listLaunchPoints', callback: {
         log_debug("listLaunchPoints: ${it}")
     })
-*/
 }
 
 def wake() {
@@ -878,25 +836,26 @@ def sendCommand(cmd)
 
 def sendWebosCommand(Map params) 
 {
-	assert params.uri
-	
 	def id = (params.prefix ?: "command") + "_" + state.sequenceNumber++
 	
 	def cb = params.callback ?: { genericHandler(it) }
 	
 	def message_data = [
 		'id': id,
-		'type': params.msgtype ?: "request",
-		'uri': "ssap://" + params.uri,
+		'type': params.type ?: "request",
 	]
+
+    if (params.uri) {
+        message_data.uri = "ssap://" + params.uri
+    }
 	
 	if (params.payload) {
 		message_data.payload = params.payload
 	}
 	
-	def json = new groovy.json.JsonOutput().toJson(message_data)
+	def json = JsonOutput.toJson(message_data)
 	
-	log_debug("Sending: " + json)
+	log_debug("Sending: " + json + " storing callback: " + id)
 	
 	callbacks[id] = cb
 	
@@ -1010,6 +969,112 @@ private parseHttpResult (output)
     	log_info "Unauthorized - clearing session value"
     	sendEvent(name:'sessionId', value:'', displayed:false)
         sendEvent(name:'refresh', displayed:false)
+    }
+}
+
+private void parseStatus(state, json) {
+    def rResp = false
+    if ((state.power == false) && !(json?.payload?.subscribed == true)) {
+        // when TV has indicated power off, do not process status messages unless they are subscriptions
+        log_warn("ignoring unsubscribed status updated during power off...")
+        return
+    }
+
+    if (json?.payload?.channel) {
+        state.lastChannelDesc = state.channelDesc
+        state.channel = json?.payload?.channel?.channelNumber
+        state.channelDesc = json?.payload?.channel?.channelNumber + " ("+ json?.payload?.channel?.majorNumber + "." + json?.payload?.channel?.minorNumber + "): " + json?.payload?.channel?.channelName
+        def cChange = ((state.lastChannelDesc == state.channelDesc)?false:true)
+        def cData = json?.payload?.channel
+        cData << [channelDesc: state.channelDesc]
+        if (!channelDetail) {
+            cData = [
+                channelDesc: state.channelDesc,
+                channelMode: json?.payload?.channel?.channelMode,
+                channelNumber: json?.payload?.channel?.channelNumber,
+                majorNumber: json?.payload?.channel?.majorNumber,
+                minorNumber: json?.payload?.channel?.minorNumber,
+                channelName: json?.payload?.channel?.channelName,
+            ]
+        }
+        sendEvent(name: "channelDesc", value: state.channelDesc, displayed:false, isStateChange: cChange)
+        sendEvent(name: "channel", value: state.channel, displayed:false, isStateChange: cChange)
+        sendEvent(name: "channelName", value: json?.payload?.channel?.channelName, displayed:false, isStateChange: cChange)
+        sendEvent(name: "channelData", value: cData, displayed:false, isStateChange: cChange)
+        log_info("state.channelDesc = ${state.channelDesc}")
+        rResp = true
+    }
+    if (json?.payload?.returnValue == true) {
+        if (json?.payload?.volume) {
+            state.lastVolume = state.Volume
+            state.Volume = json?.payload?.volume
+            sendEvent(name: "volume", value: state.Volume, displayed:false, isStateChange: ((state.lastVolume == state.Volume)?false:true))
+            log_info("state.Volume = ${state.Volume}")
+            rResp = true
+        }
+        if (json?.payload?.mute != null) { 
+            state.lastMute = state.Mute
+            state.Mute = json?.payload?.mute
+            sendEvent(name: "mute", value: state.Mute, displayed:false, isStateChange: ((state.lastMute == state.Mute)?false:true))
+            log_info("state.Mute = ${state.Mute}")
+            rResp = true
+        }
+        if (json?.payload?.modelName) { 
+            state.ModelName = json?.payload?.modelName
+            log_info("state.ModelName = ${state.ModelName}")
+            rResp = true
+        } 
+        if (json?.payload?.appId) { 
+            state.lastInput = state.CurrentInput
+            state.CurrentInput = json?.payload?.appId
+            log.info("state.CurrentInput = ${state.CurrentInput}")
+            sendEvent(name: "CurrentInput", value: state.CurrentInput, displayed:false, isStateChange: ((state.lastInput == state.CurrentInput)?false:true))
+            if (!(state.lastInput == state.CurrentInput) && (state.CurrentInput == "com.webos.app.livetv")) {
+                sendCommand('{"type":"subscribe","id":"status_channel_0","uri":"ssap://tv/getChannelProgramInfo"}')
+            }
+            if ((state.lastInput == "com.webos.app.livetv") && !(state.CurrentInput == "com.webos.app.livetv")) {
+                sendCommand('{"type":"unsubscribe","id":"status_channel_0","uri":"ssap://tv/getChannelProgramInfo"}')
+                state.channel = ""
+                state.lastChannel = ""
+                state.channelDesc = ""
+                state.lastChannelDesc = ""
+                state.channelName = ""
+                state.channelData = ""
+                sendEvent(name: "channelDesc", value: "", displayed:false, isStateChange: true)
+                sendEvent(name: "channel", value: "", displayed:false, isStateChange: true)
+                sendEvent(name: "channelName", value: "", displayed:false, isStateChange: true)
+                sendEvent(name: "channelData", value: "", displayed:false, isStateChange: true)
+            }
+        rResp = true
+        }
+        if (rResp == true) {
+            sendPowerEvent(true)
+        }
+
+        // The last (valid) message sent by the TV when powering off is a subscription response for foreground app status with appId, windowId and processID all NULL
+        if (json?.payload?.subscribed) {
+            log_debug("appID: " + (description.contains("appId")?"T":"F") + "  windowId: " + (description.contains("windowId")?"T":"F") + "  processId: " + (description.contains("processId")?"T":"F"))
+            if (description.contains("appId") && description.contains("windowId") && description.contains("processId")) {
+                if ((json?.payload?.appId == null) || (json?.payload?.appId == "")) {
+                    // The TV is powering off - change the power state, but leave the websocket to time out
+                    sendPowerEvent(false)
+                        state.CurrentInput = ""
+                        state.lastInput = ""
+                        state.channel = ""
+                        state.lastChannel = ""
+                        state.channelDesc = ""
+                        state.lastChannelDesc = ""
+                        state.channelName = ""
+                        state.channelData = ""
+                        sendEvent(name: "channelDesc", value: "", displayed:false, isStateChange: true)
+                        sendEvent(name: "channel", value: "", displayed:false, isStateChange: true)
+                        sendEvent(name: "channelName", value: "", displayed:false, isStateChange: true)
+                        sendEvent(name: "channelData", value: "", displayed:false, isStateChange: true)
+                        sendEvent(name: "CurrentInput", value: "", displayed:false, isStateChange: true)
+                        log.warn("Received POWER DOWN notification.")
+                }
+            }
+        }
     }
 }
 
