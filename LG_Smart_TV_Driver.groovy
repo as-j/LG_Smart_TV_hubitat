@@ -15,6 +15,7 @@
  *  Ported to Hubitat by: Mike Magrann, 3/27/2019
  *  Modified to support WebOS SSAP protocol: Cybrmage, 7/18/2019
  *    portions of the websocket code modified from the Logitech Harmony plugin by Dan G Ogorchock 
+ *  Refactoring of callbacks, removed hand rolled json: asj, 9/18/2019
  *
 ***See Release Notes at the bottom***
 ***********************************************************************************************************************/
