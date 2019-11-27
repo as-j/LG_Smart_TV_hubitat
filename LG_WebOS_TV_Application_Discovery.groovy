@@ -15,17 +15,16 @@
  *  Ported to Hubitat by: Mike Magrann, 3/27/2019
  *  Modified to support WebOS SSAP protocol: Cybrmage, 7/18/2019
  *    portions of the websocket code modified from the Logitech Harmony plugin by Dan G Ogorchock 
-*   Add null check to avoid log errors, Aug 2019
  *
 ***See Release Notes at the bottom***
 ***********************************************************************************************************************/
 public static String version()      {  return "v0.2.4"  }
 
 definition(
-    name: "LG Smart TV Discovery 2012+",
-    namespace: "ekim",
-    author: "Sam Lalor",
-    description: "Discovers an LG Smart TV (2012+)",
+    name: "LG WebOS TV Discovery",
+    namespace: "asj",
+    author: "Sam Lalor, Andrew SJ",
+    description: "Discovers an LG WebOS TV",
     category: "My Apps",
     iconUrl: "",
     iconX2Url: "",
@@ -153,7 +152,7 @@ def addDevice()
   {
   	log.debug "Hub: " + location.hubs[0].id
   	log.debug "Ekim: " + ipAddress + pairKey
-    addChildDevice("ekim", "LG Smart TV", dni, null, [name: "LG Smart TV", isComponent: true, label: "LG Smart TV"])
+    addChildDevice("asj", "LG WebOS TV", dni, null, [name: "LG WebOS TV", isComponent: true, label: "LG WebOS TV - $ipAddress"])
 	d = getChildDevice(dni)
 	d.updateSetting("televisionIp",[type:"text", value:ipAddress])
 	d.updateSetting("televisionMac",[type:"text", value:macAddress])
@@ -388,3 +387,4 @@ def uninstalled() {
 * Ported LG Smart Tv from Smarththings
 *
 ***********************************************************************************************************************/
+
