@@ -1,0 +1,149 @@
+/*
+ * LG Mouse Web Socket Driver
+ *
+ * 
+ */
+
+import groovy.transform.Field
+
+metadata {
+    definition(
+        name: "LG Mouse WebSocket Driver",
+        namespace: "asj",
+        author: "asj",
+        importUrl: ""
+    ) {
+        capability "Switch"
+        capability "Sensor"
+        
+        command "setMouseURI", ["string"]
+
+        command "click"
+        command "sendButton", ["string"]
+        command "move", ["number", "number"]
+        command "scroll", ["number", "number"]
+		command "ok"
+		command "home"
+        command "left"
+        command "right"
+    }
+}
+
+@Field List = [
+        "HOME",
+        "BACK",
+        "UP",
+        "DOWN",
+        "LEFT",
+        "RIGHT",
+        "RED",
+        "BLUE",
+        "YELLOW",
+        "GREEN",
+    ]
+
+preferences {
+    section("URIs") {
+        input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
+    }
+}
+
+def logsOff() {
+    log.warn "debug logging disabled..."
+    device.updateSetting("logEnable", [value: "false", type: "bool"])
+}
+
+def updated() {
+    log.info "updated..."
+    log.warn "debug logging is: ${logEnable == true}"
+    if (logEnable) runIn(1800, logsOff)
+}
+
+def parse(String description) {
+    if (logEnable) log.debug(description)
+}
+
+def setMouseURI(uri) {
+    interfaces.webSocket.close()
+    state.status = "closed"
+    state.uri = uri
+    try {
+        if (logEnable) log.debug "Pointer Connecting to: ${uri}"
+        interfaces.webSocket.connect(uri)
+    } catch (e) {
+        log.info "Failed to open mouse socket: $e"
+    }
+}
+
+def click() {
+    interfaces.webSocket.sendMessage("type:click\n\n")
+}
+
+def sendButton(String name) {
+    interfaces.webSocket.sendMessage("type:button\nname:${name}\n\n")
+}
+
+def move(x, y) {
+    def str = "type:move\ndx:${x}\ndy:${y}\ndrag: 0\n\n"
+    log.debug("Sending: $str")
+    interfaces.webSocket.sendMessage(str)
+}
+
+def scroll(dx, dy) {
+    interfaces.webSocket.sendMessage("type:scroll\ndx:${dx}\ndy:${dy}\n\n");
+}
+
+def on() {
+    if (logEnable) log.debug "Sending on GET request to [${settings.onURI}]"
+
+    if (!settings.onURI) {
+        sendEvent(name: "switch", value: "off", isStateChange: true)
+        return;
+    }
+    
+    try {
+        httpGet(settings.onURI) { resp ->
+            if (resp.success) {
+                sendEvent(name: "switch", value: "on", isStateChange: true)
+            }
+            if (logEnable)
+                if (resp.data) log.debug "${resp.data}"
+        }
+    } catch (Exception e) {
+        log.warn "Call to on failed: ${e.message}"
+    }
+}
+
+def off() {
+    if (logEnable) log.debug "Sending off GET request to [${settings.offURI}]"
+
+    if (!settings.offURI) {
+        sendEvent(name: "switch", value: "off", isStateChange: true)
+        return;
+    }
+    
+    try {
+        httpGet(settings.offURI) { resp ->
+            if (resp.success) {
+                sendEvent(name: "switch", value: "off", isStateChange: true)
+            }
+            if (logEnable)
+                if (resp.data) log.debug "${resp.data}"
+        }
+    } catch (Exception e) {
+        log.warn "Call to off failed: ${e.message}"
+    }
+}
+
+def parse(status) {
+    log.debug("Parse update: $status")
+}
+
+def webSocketStatus(String status) {
+    log.debug("Web Socket update: $status")
+    state.status = status
+}
+
+
+
+
