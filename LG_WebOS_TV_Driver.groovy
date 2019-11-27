@@ -26,12 +26,11 @@ import groovy.json.JsonOutput
 import groovy.transform.Field
 
 metadata {
-	definition (name: "LG Smart TV", namespace: "asj", author: "Andrew Stanley-Jones")
+	definition (name: "LG WebOS TV", namespace: "asj", author: "Andrew Stanley-Jones")
 	{
 		capability "Initialize"
 		capability "TV"
 		capability "AudioVolume"
-		capability "Music Player"
 		capability "Refresh"
 		capability "Switch"
 		capability "Notification"
@@ -39,12 +38,10 @@ metadata {
 		command "on"
 		command "off"
 		command "refresh"
-		command "externalInput"
-		command "back"
-		command "up"
-		command "down"
-		command "left"
-		command "right"
+        command "refreshInputList"
+        command "getMouseURI"
+		command "externalInput", ["string"]
+        command "sendJson", ["string"]
 		command "myApps"
 		command "ok"
 		command "home"
@@ -53,6 +50,8 @@ metadata {
 		attribute "CurrentInput", "string"
 		attribute "sessionId", "string"
 //		attribute "mute", "string"
+        
+        attribute "availableInputs", "list"
 		
 		attribute "channelDesc", "string"
 		attribute "channelName", "string"
@@ -118,7 +117,7 @@ def webosRegister() {
         appVersion: "1.1",
         signed: [
           localizedVendorNames: [
-             "": "LG Electronics",
+             "": "LG Electronics",              
           ],
           appId: "com.lge.test",
           created: "20140509",
@@ -142,6 +141,8 @@ def webosRegister() {
           ],
           localizedAppNames: [
              "": "LG Remote App",
+             "ko-KR": "리모컨 앱",
+             "zxx-XX": "ЛГ Rэмotэ AПП",
           ],
           vendorId: "com.lge",
           serial: "2f930e2d2cfe083771f68e4fe7bb07",
@@ -193,8 +194,8 @@ def webosRegister() {
                 setPaired(true)
                 // Hello doesn't seem to do anything?
                 //runInMillis(10, sendHello)
-                runInMillis(10, sendRequestInfo)
-                runInMillis(50, webosSubscribeToStatus)
+                //runInMillis(10, sendRequestInfo)
+                //runInMillis(50, webosSubscribeToStatus)
 
             }
             return true
@@ -218,17 +219,47 @@ def sendRequestInfo() {
     })
 }
 
+def refreshInputList() {
+    sendWebosCommand(uri: "com.webos.applicationManager/listLaunchPoints", payload: [], callback: { json ->
+        def inputList = []
+        def nameToInputId = [:]
+        json?.payload?.launchPoints.each { app ->
+            //log_debug "App Name: ${app.title} System App: ${app.systemApp} ID: ${app.id}"
+            inputList += app.title
+            nameToInputId[app.title] = app.id
+        }
+        state.nameToInputId = nameToInputId
+        sendEvent(name: "availableInputs", value: inputList);
+    })
+}
+
+def getMouseURI() {
+    sendWebosCommand(uri: "com.webos.service.networkinput/getPointerInputSocket", payload: [], callback: { json ->
+        log_debug("getMouseURI: $jon")
+        if (json?.payload?.socketPath) {
+            log_debug("Pointer Connecting to: ${json.payload.socketPath}")
+            def mouseDev = getChildDevice("LG_TV_Mouse_${televisionIp}")
+            if(!mouseDev) mouseDev = addChildDevice("asj", "LG Mouse WebSocket Driver", "LG_TV_Mouse__${televisionIp}", null, [label: thisName, name: thisName])
+            log_debug("Got mouse dev: $mouseDev")
+            mouseDev.setMouseURI(json.payload.socketPath)
+        }
+    })
+}
+
+def sendJson(String json) {
+    sendCommand(json);
+}
+
 def setPower(boolean newState) {
 	state.power = newState
 	log_debug("setPower: setting state.power = " + (newState ? "ON":"OFF"))
 }
 
-def sendPowerEvent(boolean newState) {
-	state.lastPower = state.power
-	state.power = newState
-	log_debug("sendPowerEvent: sending state.power = " + (newState ? "ON":"OFF") + ((state.lastPower == state.power)?" event":" state change event"))
-	sendEvent(name: "power", value: (newState?"on":"off"), displayed:false, isStateChange: ((state.lastPower == state.power)?false:true))
-	sendEvent(name: "switch", value: (newState?"on":"off"), displayed:false, isStateChange: ((state.lastPower == state.power)?false:true))
+def sendPowerEvent(String onOrOff) {
+	state.power = onOrOff
+    log_debug("sendPowerEvent: sending state.power ${onOrOff} was: ${state.lastPower}")
+	sendEvent(name: "power", value: onOrOff)
+	sendEvent(name: "switch", value: onOrOff)
 }
 
 def setPaired(boolean newState) {
@@ -237,6 +268,7 @@ def setPaired(boolean newState) {
 }
 
 def initialize()
+
 {
     log_debug("LG Smart TV Driver - initialize - ip: ${televisionIp}  mac: ${televisionMac}  type: ${televisionType}  key: ${pairingKey} debug: ${debug} logText: ${descriptionText}")
     log_debug("LG Smart TV Driver - initialize - settings:" + settings.inspect())
@@ -265,26 +297,24 @@ def initialize()
     setPower(false)
 	state.webSocket = "initialize"
 	unschedule()
+    
+    def mouseDev = getChildDevice("LG_TV_Mouse_${televisionIp}")
+	if(!mouseDev) mouseDev = addChildDevice("asj", "LG Mouse WebSocket Driver", "LG_TV_Mouse_${televisionIp}")
 
-    if (televisionType == "WEBOS") {
-		if (state.webSocket == "open") {
-			interfaces.webSocket.close()
-		}
-        try {
-            log_debug("Connecting websocket to: \"ws://${televisionIp}:3000/\"")
-            interfaces.webSocket.connect("ws://${televisionIp}:3000/")
-        } 
-        catch(e) {
-            //if (logEnable) log.debug "initialize error: ${e.message}"
-            log_warn "initialize error: ${e.message}"
-            log.error "WebSocket connect failed"
-        }
-//        if ((pairingKey == null) || (pairingKey == "")) {
-//            webosStartPairing()
-//        } else {
-//            state.paired = true
-//			webosRegister()
-//        }
+
+
+	if (state.webSocket == "open") {
+        interfaces.webSocket.close()
+	}
+    
+     try {
+        log_debug("Connecting websocket to: \"ws://${televisionIp}:3000/\"")
+        interfaces.webSocket.connect("ws://${televisionIp}:3000/")
+     } 
+     catch(e) {
+        //if (logEnable) log.debug "initialize error: ${e.message}"
+        log_warn "initialize error: ${e.message}"
+        log.error "WebSocket connect failed"
     }
 }
 
@@ -319,24 +349,13 @@ def parse(String description)
 {
     // parse method is shared between HTTP and Websocket implementations
 	log_debug "Parsing '${description}'"
-    
-    if (televisionType == "NETCAST") {
-        if (description == "updated") 
-        {
-    	    sendEvent(name:'refresh', displayed:false)
-        }
-        else
-        {
-    	    parseHttpResult(description)
-        }
-    } else {
-        // parse the websocket response
-        parseWebsocketResult(description)
-    }
+
+    // parse the websocket response
+    parseWebsocketResult(description)
 }
 
 def parseWebsocketResult(String description){
-	log_debug("parseWebsocketResult")
+	log_debug("parseWebsocketResult: $description")
 	def json = null
     try{
         json = new JsonSlurper().parseText(description)
@@ -431,7 +450,7 @@ def webSocketStatus(String status){
 //				sendEvent(name: "switch", value: "off", displayed:false, isStateChange: true)
 //			}
 //			state.power = false
-			sendPowerEvent(false)
+			sendPowerEvent("off")
 			//retry every 60 seconds
 			state.reconnectDelay = 30
 		}
@@ -477,7 +496,7 @@ def webSocketStatus(String status){
 //			sendEvent(name: "switch", value: "off", displayed:false, isStateChange: true)
 //		}
 //		state.power = false
-		sendPowerEvent(false)
+		sendPowerEvent("off")
 		setPaired(false)
 		state.webSocket = "closed"
 		reconnectWebSocket()
@@ -542,7 +561,7 @@ def deviceNotification(String notifyMessage) {
 def on()
 {
 	log_debug "Executing 'Power On'"
-	sendPowerEvent(true)
+	sendPowerEvent("on")
 //	sendEvent(name: "switch", value: "on", displayed:false, isStateChange: true)
 //	sendEvent(name: "power", value: "on", displayed:false, isStateChange: true)
 	return wake()
@@ -551,7 +570,7 @@ def on()
 def off()
 {
 	log_debug "Executing 'Power Off'"
-	sendPowerEvent(false)
+	sendPowerEvent("off")
 //    sendEvent(name: "switch", value: "off", displayed:false, isStateChange: true)
 //	sendEvent(name: "power", value: "off", displayed:false, isStateChange: true)
     if (televisionType == "NETCAST") { 
@@ -615,19 +634,9 @@ def setVolume(level) {
 def setLevel(level) { setVolume(level) }
 
 
-def refresh() 
-{
-    log_debug "Executing 'refresh'"
-    if (televisionType == "NETCAST") { 
-	    return sessionIdCommand()
-	} else {
-		log_info("refresh: refreshing System Info")
-        //initialize()
-        webosRegister()
-		//sendCommand('{"type":"hello","id":"status_%d"}')
-		//sendCommand('{"type":"request","id":"status_%d","uri":"ssap://system/getSystemInfo"}')
-		//return webosPollStatus()
-	}
+def refresh() {
+    log_info("refresh: refreshing System Info")
+    webosRegister()
 }
 
 def unmute() {
@@ -646,90 +655,39 @@ def mute()
     }
 }
 
-def externalInput()
+def externalInput(String input)
 {
-    if (televisionType == "NETCAST") { 
-        return sendCommand(47)
-    } else {
-        def cInput = state.CurrentInput ?: "com.webos.app.hdmi1"
-        def nInput = null
-	    switch(cInput) {
-		    case "com.webos.app.externalinput.av1" :
-		        nInput = "com.webos.app.externalinput.component"
-			    break
-		    case "com.webos.app.externalinput.component" :
-		        nInput = "com.webos.app.hdmi1"
-			    break
-		    case "com.webos.app.hdmi1" :
-		        nInput = "com.webos.app.hdmi2"
-			    break
-		    case "com.webos.app.hdmi2" :
-		        nInput = "com.webos.app.hdmi3"
-			    break
-		    case "com.webos.app.hdmi3" :
-		        nInput = "com.webos.app.livetv"
-			    break
-		    case "com.webos.app.livetv" :
-		        nInput = "com.webos.app.externalinput.av1"
-			    break
-			default :
-				nInput = "com.webos.app.hdmi1"
-				break
-	    }
-        return sendCommand('{"type":"request","id":"command_%d","uri":"ssap://system.launcher/launch","payload":{"id":"' + nInput + '"}}')
-//        return sendCommand('{"type":"request","id":"command_%d","uri":"ssap://tv/switchInput","payload":{"inputId":"HDMI_1"}}')
-    }
+    if (state.nameToInputId[input]) input = state.nameToInputId[input]
+    
+    return sendWebosCommand(uri: "system.launcher/launch", payload: [id: input], callback: { json ->
+        log_debug("externalInfo(): reply is $json")
+    })
+    //return sendCommand('{"type":"request","id":"command_%d","uri":"ssap://system.launcher/launch","payload":{"id":"' + input + '"}}')
 }
 
 def back()
 {
-    if (televisionType == "NETCAST") { 
-        return sendCommand(23)
-    } else {
-    }
 }
 
 def up()
 {
-    if (televisionType == "NETCAST") { 
-        return sendCommand(12)
-    } else {
-    }
 }
 
 def down()
 {
-	return sendCommand(13)
-    if (televisionType == "NETCAST") { 
-        return sendCommand(13)
-    } else {
-    }
 }
 
 def left()
 {
-    if (televisionType == "NETCAST") { 
-        return sendCommand(14)
-    } else {
-    }
 }
 
 def right()
 {
-    if (televisionType == "NETCAST") { 
-        return sendCommand(15)
-    } else {
-    }
 }
 
 def myApps()
 {
-    if (televisionType == "NETCAST") { 
-        return sendCommand(417)
-    } else {
-        sendCommand('{"type":"request","id":"command_%d","uri":"ssap://system.launcher/launch","payload":{"id":"com.webos.app.discovery"}}')
-		return webosPollStatus()
-    }
+    sendCommand('{"type":"request","id":"command_%d","uri":"ssap://system.launcher/launch","payload":{"id":"com.webos.app.discovery"}}')
 }
 
 def play()
@@ -743,20 +701,12 @@ def pause()
 }
 
 def ok()
-{
-    if (televisionType == "NETCAST") { 
-        return sendCommand(20)
-    }
-    
+{    
 	return sendWebosCommand(uri: "com.webos.service.ime/sendEnterKey")
 }
 
 def home()
 {
-    if (televisionType == "NETCAST") { 
-        return sendCommand(21)
-    }
-
     log_debug("OLD Inputs: ${state.inputList} total length: ${state.toString().length()}")
 
     state.remove('inputList')
@@ -856,13 +806,13 @@ def sendWebosCommand(Map params)
 	
 	def json = JsonOutput.toJson(message_data)
 	
-	log_debug("Sending: " + json + " storing callback: " + id)
+	log_debug("Sending: $json storing callback: $id")
 	
 	callbacks[id] = cb
 	
 	interfaces.webSocket.sendMessage(json)
 	
-	log_debug("sendWebosCommand sending json: ${json}")
+	log_debug("sendWebosCommand sending json: $json")
 }
 
 def sessionIdCommand()
@@ -916,63 +866,6 @@ def tvCommand(cmd)
 	}
 }
 
-
-
-def appCommand()
-{
-	log_debug "Reached App Command"
-    def commandText = "<?xml version=\"1.0\" encoding=\"utf-8\"?><envelope><api type=\"command\"><name>AppExecute</name><auid>1</auid><appname>Netflix</appname><contentId>1</contentId></api></envelope>"
-
-    def httpRequest = [
-      	method:		"POST",
-        path: 		"/udap/api/command",
-        body:		"$commandText",
-        headers:	[
-        				HOST:			"$televisionIp:8080",
-                        "Content-Type":	"application/atom+xml",
-                    ]
-	]
-    
-    try 
-    {
-    	def hubAction = new hubitat.device.HubAction(httpRequest)
-        log_debug "hub action: $hubAction"
-    	return hubAction
-    }
-    catch (Exception e) 
-    {
-		log_warn "Hit Exception $e on $hubAction"
-	}
-}
-
-private parseHttpResult (output)
-{
-	def headers = ""
-	def parsedHeaders = ""
-    
-    def msg = parseLanMessage(output)
-
-    def headersAsString = msg.header // => headers as a string
-    def headerMap = msg.headers      // => headers as a Map
-    def body = msg.body              // => request body as a string
-    def status = msg.status          // => http status code of the response
-    def json = msg.json              // => any JSON included in response body, as a data structure of lists and maps
-    def xml = msg.xml                // => any XML included in response body, as a document tree structure
-    def data = msg.data              // => either JSON or XML in response body (whichever is specified by content-type header in response)
-	log_debug "status check ekim: status: $status"
-
-	log_debug "headers: $headerMap, status: $status, body: $body, data: $json"
-  
-    if (status == 200){
-    	parseSessionId(body)
-    }
-    else if (status == 401){
-    	log_info "Unauthorized - clearing session value"
-    	sendEvent(name:'sessionId', value:'', displayed:false)
-        sendEvent(name:'refresh', displayed:false)
-    }
-}
-
 private void parseStatus(state, json) {
     def rResp = false
     if ((state.power == false) && !(json?.payload?.subscribed == true)) {
@@ -1009,14 +902,14 @@ private void parseStatus(state, json) {
         if (json?.payload?.volume) {
             state.lastVolume = state.Volume
             state.Volume = json?.payload?.volume
-            sendEvent(name: "volume", value: state.Volume, displayed:false, isStateChange: ((state.lastVolume == state.Volume)?false:true))
+            sendEvent(name: "volume", value: state.Volume)
             log_info("state.Volume = ${state.Volume}")
             rResp = true
         }
         if (json?.payload?.mute != null) { 
             state.lastMute = state.Mute
             state.Mute = json?.payload?.mute
-            sendEvent(name: "mute", value: state.Mute, displayed:false, isStateChange: ((state.lastMute == state.Mute)?false:true))
+            sendEvent(name: "mute", value: state.Mute)
             log_info("state.Mute = ${state.Mute}")
             rResp = true
         }
@@ -1029,7 +922,7 @@ private void parseStatus(state, json) {
             state.lastInput = state.CurrentInput
             state.CurrentInput = json?.payload?.appId
             log.info("state.CurrentInput = ${state.CurrentInput}")
-            sendEvent(name: "CurrentInput", value: state.CurrentInput, displayed:false, isStateChange: ((state.lastInput == state.CurrentInput)?false:true))
+            sendEvent(name: "CurrentInput", value: state.CurrentInput)
             if (!(state.lastInput == state.CurrentInput) && (state.CurrentInput == "com.webos.app.livetv")) {
                 sendCommand('{"type":"subscribe","id":"status_channel_0","uri":"ssap://tv/getChannelProgramInfo"}')
             }
@@ -1049,7 +942,7 @@ private void parseStatus(state, json) {
         rResp = true
         }
         if (rResp == true) {
-            sendPowerEvent(true)
+            sendPowerEvent("on")
         }
 
         // The last (valid) message sent by the TV when powering off is a subscription response for foreground app status with appId, windowId and processID all NULL
@@ -1058,7 +951,7 @@ private void parseStatus(state, json) {
             if (description.contains("appId") && description.contains("windowId") && description.contains("processId")) {
                 if ((json?.payload?.appId == null) || (json?.payload?.appId == "")) {
                     // The TV is powering off - change the power state, but leave the websocket to time out
-                    sendPowerEvent(false)
+                    sendPowerEvent("off")
                         state.CurrentInput = ""
                         state.lastInput = ""
                         state.channel = ""
