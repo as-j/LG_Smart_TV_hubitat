@@ -1,6 +1,8 @@
 /**
  *  LG Smart TV Device Type
  *
+ * ImportURL: https://raw.githubusercontent.com/as-j/LG_Smart_TV_hubitat/master/LG_WebOS_TV_Driver.groovy
+ *
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -35,13 +37,13 @@ metadata {
 		capability "Switch"
 		capability "Notification"
 
-		command "on"
+                command "on"
 		command "off"
 		command "refresh"
-        command "refreshInputList"
-        command "getMouseURI"
+                command "refreshInputList"
+                command "getMouseURI"
 		command "externalInput", ["string"]
-        command "sendJson", ["string"]
+                command "sendJson", ["string"]
 		command "myApps"
 		command "ok"
 		command "home"
@@ -51,12 +53,11 @@ metadata {
 		attribute "sessionId", "string"
 //		attribute "mute", "string"
         
-        attribute "availableInputs", "list"
+                attribute "availableInputs", "list"
 		
 		attribute "channelDesc", "string"
 		attribute "channelName", "string"
 		attribute "channelData", "string"
-
 	}
 
 	preferences {
