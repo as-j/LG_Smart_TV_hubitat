@@ -237,11 +237,15 @@ def getMouseURI() {
     sendWebosCommand(uri: "com.webos.service.networkinput/getPointerInputSocket", payload: [], callback: { json ->
         log_debug("getMouseURI: $jon")
         if (json?.payload?.socketPath) {
-            log_debug("Pointer Connecting to: ${json.payload.socketPath}")
-            def mouseDev = getChildDevice("LG_TV_Mouse_${televisionIp}")
-            if(!mouseDev) mouseDev = addChildDevice("asj", "LG Mouse WebSocket Driver", "LG_TV_Mouse__${televisionIp}", null, [label: thisName, name: thisName])
-            log_debug("Got mouse dev: $mouseDev")
-            mouseDev.setMouseURI(json.payload.socketPath)
+            log_debug("Send Mouse driver URI: ${json.payload.socketPath}")
+            try {
+                def mouseDev = getChildDevice("LG_TV_Mouse_${televisionIp}")
+                if(!mouseDev) mouseDev = addChildDevice("asj", "LG Mouse WebSocket Driver", "LG_TV_Mouse__${televisionIp}", null, [label: thisName, name: thisName])
+                log_debug("Got mouse dev: $mouseDev")
+                mouseDev.setMouseURI(json.payload.socketPath)
+            } catch(e) {
+                log_info("Failed to get mouse dev: $e")
+            }
         }
     })
 }
@@ -297,21 +301,20 @@ def initialize()
     setPower(false)
 	state.webSocket = "initialize"
 	unschedule()
-    
-    def mouseDev = getChildDevice("LG_TV_Mouse_${televisionIp}")
-	if(!mouseDev) mouseDev = addChildDevice("asj", "LG Mouse WebSocket Driver", "LG_TV_Mouse_${televisionIp}")
+ 
+    try {
+        def mouseDev = getChildDevice("LG_TV_Mouse_${televisionIp}")
+	    if(!mouseDev) mouseDev = addChildDevice("asj", "LG Mouse WebSocket Driver", "LG_TV_Mouse_${televisionIp}")
+    } catch(e) {
+        log_info("init(): Failed to create mouse dev: $e")
+    }
 
+    interfaces.webSocket.close()
 
-
-	if (state.webSocket == "open") {
-        interfaces.webSocket.close()
-	}
-    
-     try {
+    try {
         log_debug("Connecting websocket to: \"ws://${televisionIp}:3000/\"")
         interfaces.webSocket.connect("ws://${televisionIp}:3000/")
-     } 
-     catch(e) {
+    } catch(e) {
         //if (logEnable) log.debug "initialize error: ${e.message}"
         log_warn "initialize error: ${e.message}"
         log.error "WebSocket connect failed"
