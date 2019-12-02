@@ -257,8 +257,9 @@ def refreshInputList() {
 
 def getMouseChild() {
     try {
+        log_info "LG_TV_Mouse_${televisionIp}"
         def mouseDev = getChildDevice("LG_TV_Mouse_${televisionIp}")
-        if(!mouseDev) mouseDev = addChildDevice("asj", "LG Mouse WebSocket Driver", "LG_TV_Mouse__${televisionIp}", null, [label: thisName, name: thisName])
+        if(!mouseDev) mouseDev = addChildDevice("asj", "LG Mouse WebSocket Driver", "LG_TV_Mouse_${televisionIp}")
         return mouseDev
     } catch(e) {
         log_info("Failed to get mouse dev: $e")
