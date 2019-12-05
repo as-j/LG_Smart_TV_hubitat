@@ -887,7 +887,7 @@ def sendWebosCommand(Map params)
 	
 	def json = JsonOutput.toJson(message_data)
 	
-	log_info("Sending: $json storing callback: $id")
+	log_debug("Sending: $json storing callback: $id")
 	
 	callbacks[id] = cb
 	
