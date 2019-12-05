@@ -3,6 +3,15 @@
  *
  * ImportURL: https://raw.githubusercontent.com/as-j/LG_Smart_TV_hubitat/master/LG_WebOS_TV_Driver.groovy
  *
+ *  Notifcation icons are fetched from: 
+ *  https://github.com/pasnox/oxygen-icons-png/tree/master/oxygen/32x32
+ * 
+ *  They are named without extention as: <directory>/<file>
+ *  
+ *  For example:
+ *    - file status/battery-low.png has an icon name: status/battery-low
+ *    - file actions/checkbox.ping has an icon name: actions/checkbox
+ * 
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -52,6 +61,9 @@ metadata {
         command "down"
         command "back"
         command "enter"
+        command "notificationIcon", ["string", "string"]
+        command "setIcon", ["string", "string"]
+        command "clearIcons"
         
 		attribute "input", "string"        
         attribute "availableInputs", "list"
@@ -578,6 +590,83 @@ def deviceNotification(String notifyMessage) {
                      payload: [message: notifyMessage])
 }
 
+def setIcon(String icon_name, String data) {
+    state.icon_data[icon_name] = data
+}
+
+def clearIcons() {
+    state.icon_data = [:]
+}
+
+def notificationIcon(String notifyMessage, String icon_name) {
+    def base_url = "https://raw.githubusercontent.com/pasnox/oxygen-icons-png/master/oxygen/32x32/"
+    def icon_extention = "png"
+    
+    def full_uri = "${base_url}/${icon_name}.png"
+    
+    if (!state.icon_data) state.icon_data = [:]
+    
+    if (!state.icon_data[icon_name]) {
+        try {
+            if (logInfoEnable) log.info "notificationIcon(): asking for $address_card_base_url "
+            def start_time = now()
+            httpGet(full_uri, { resp ->
+                handleIconResponse(resp, [
+                    icon_extention: icon_extention,
+                    icon_name: icon_name,
+                    notify_message: notifyMessage,
+                    start_time: start_time,
+                ])
+            })
+            /*
+            def postParams = [
+                uri: address_card_base_url,
+                requestContentType: "image/png",
+                timeout: 10]
+            asynchttpGet('handleIconResponse', postParams, [
+                icon_extention: icon_extention,
+                icon_name: icon_name,
+                notify_message: notifyMessage,
+                start_time: now(),
+            ])
+            */
+        } catch (Exception e) {
+            log.warn "Call to off failed: ${e.message}"
+        }
+    } else {
+        String icon = state.icon_data[icon_name]
+        if (logInfoEnable) log.info "notificationIcon(): icon size: ${icon.size()} sending notifcation: $notifyMessage name: ${icon_name} icon: ${state.icon_data[icon_name]}"
+        sendWebosCommand(uri: "system.notifications/createToast",
+                         type: "request",
+                         payload: [message: notifyMessage,
+                                   iconData: icon,
+                                   iconExtension: icon_extention],
+                         callback: { json ->
+                             log_info "genericHandler: got json: ${json}"
+                         })
+    }
+}
+
+def handleIconResponse(resp, data) {
+    //if (logEnable) log.debug("Executing handleHttpOnResponse: ${resp.properties}")
+    if (logInfoEnable) log.debug "handleIconResponse(): resp.status: ${resp.status} took: ${now() - data.start_time}ms"
+    def methods = resp.metaClass.methods
+    
+    def svg_pic = resp.getData()
+    //if (logInfoEnable) log.debug "handleIconResponse(): methods: ${methods}"
+    if (logInfoEnable) log.debug "handleIconResponse(): message: ${resp.data.available()}"
+    //byte[] svg_data = resp.getData()
+    //if (logInfoEnable) log.debug "handleIconResponse(): message: ${resp.getHeaders()}"
+    int n = resp.data.available()
+    byte[] bytes = new byte[n]
+    resp.data.read(bytes, 0, n)
+    def base64String = bytes.encodeBase64().toString()
+    if (logInfoEnable) log.debug "handleIconResponse(): size of b64: ${base64String.size()}"
+    
+    state.icon_data[data.icon_name] = base64String
+    notificationIcon(data.notify_message, data.icon_name)
+}
+
 def on()
 {
 	log_info "on(): Executing 'Power On'"
@@ -798,7 +887,7 @@ def sendWebosCommand(Map params)
 	
 	def json = JsonOutput.toJson(message_data)
 	
-	log_debug("Sending: $json storing callback: $id")
+	log_info("Sending: $json storing callback: $id")
 	
 	callbacks[id] = cb
 	
