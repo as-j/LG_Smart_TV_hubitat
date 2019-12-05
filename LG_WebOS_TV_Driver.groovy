@@ -12,6 +12,14 @@
  *    - file status/battery-low.png has an icon name: status/battery-low
  *    - file actions/checkbox.ping has an icon name: actions/checkbox
  * 
+ *  They can be used in a notifcation message formated as:
+ *  [icon name]Notification Message
+ * 
+ *  For example:
+ *  [status/battery-low]My Battery is low!
+ * 
+ *  Or you can use the custom command "notificationIcon" which takes 2 strings
+ *  the message, and icon name
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -584,10 +592,18 @@ def genericHandler(json) {
 	log_debug("genericHandler: got json: ${json}")
 }
 
-def deviceNotification(String notifyMessage) {	
-    log_info "deviceNotification(): new message $notifyMessage"
-    sendWebosCommand(uri: "system.notifications/createToast",
-                     payload: [message: notifyMessage])
+def deviceNotification(String notifyMessage) {
+    def icon_info = notifyMessage =~ /^\[(.+?)\](.+)/
+    log_info "deviceNotification(): new message $notifyMessage found icon: ${icon_info != null}"
+    if (!icon_info) {      
+        sendWebosCommand(uri: "system.notifications/createToast",
+                         payload: [message: notifyMessage])
+    } else {
+        log_debug "deviceNotification(): icon_name match $icon_name"
+        def icon_name = icon_info[0][1]
+        def msg = icon_info[0][2]
+        notificationIcon(msg, icon_name)
+    }
 }
 
 def setIcon(String icon_name, String data) {
@@ -608,7 +624,7 @@ def notificationIcon(String notifyMessage, String icon_name) {
     
     if (!state.icon_data[icon_name]) {
         try {
-            if (logInfoEnable) log.info "notificationIcon(): asking for $address_card_base_url "
+            log_info "notificationIcon(): asking for $full_uri"
             def start_time = now()
             httpGet(full_uri, { resp ->
                 handleIconResponse(resp, [
@@ -631,37 +647,30 @@ def notificationIcon(String notifyMessage, String icon_name) {
             ])
             */
         } catch (Exception e) {
-            log.warn "Call to off failed: ${e.message}"
+            log.warn "notificationIcon(): Failed to fetch icon: ${e.message} sending blank"
+            deviceNotification("<Failed to find icon: ${e.message}>${notifyMessage}")
         }
     } else {
         String icon = state.icon_data[icon_name]
-        if (logInfoEnable) log.info "notificationIcon(): icon size: ${icon.size()} sending notifcation: $notifyMessage name: ${icon_name} icon: ${state.icon_data[icon_name]}"
+        log_debug "notificationIcon(): icon size: ${icon.size()} sending notifcation: $notifyMessage name: ${icon_name} icon: ${state.icon_data[icon_name]}"
         sendWebosCommand(uri: "system.notifications/createToast",
-                         type: "request",
                          payload: [message: notifyMessage,
                                    iconData: icon,
-                                   iconExtension: icon_extention],
-                         callback: { json ->
-                             log_info "genericHandler: got json: ${json}"
-                         })
+                                   iconExtension: icon_extention])
     }
 }
 
 def handleIconResponse(resp, data) {
-    //if (logEnable) log.debug("Executing handleHttpOnResponse: ${resp.properties}")
-    if (logInfoEnable) log.debug "handleIconResponse(): resp.status: ${resp.status} took: ${now() - data.start_time}ms"
-    def methods = resp.metaClass.methods
+    log_info "handleIconResponse(): resp.status: ${resp.status} took: ${now() - data.start_time}ms"
     
     def svg_pic = resp.getData()
-    //if (logInfoEnable) log.debug "handleIconResponse(): methods: ${methods}"
-    if (logInfoEnable) log.debug "handleIconResponse(): message: ${resp.data.available()}"
-    //byte[] svg_data = resp.getData()
-    //if (logInfoEnable) log.debug "handleIconResponse(): message: ${resp.getHeaders()}"
     int n = resp.data.available()
+
+    log_debug "handleIconResponse(): message bytes $n"
     byte[] bytes = new byte[n]
     resp.data.read(bytes, 0, n)
     def base64String = bytes.encodeBase64().toString()
-    if (logInfoEnable) log.debug "handleIconResponse(): size of b64: ${base64String.size()}"
+    log_debug "handleIconResponse(): size of b64: ${base64String.size()}"
     
     state.icon_data[data.icon_name] = base64String
     notificationIcon(data.notify_message, data.icon_name)
@@ -671,7 +680,7 @@ def on()
 {
 	log_info "on(): Executing 'Power On'"
 	sendPowerEvent("on")
-    def mac = televisionMax ?: state.televisionMac
+    def mac = settings.televisionMac ?: state.televisionMac
     if (!mac) {
         log_error "No mac address know for TV, can't send wake on lan"
         return
