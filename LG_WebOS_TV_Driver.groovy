@@ -517,6 +517,7 @@ def handler_getForegroundAppInfo(data) {
     def descriptionText = "${device.displayName} channelName is ${niceName}"
     if (txtEnabled) log_info "${descriptionText}" 
     sendEvent(name: "channelName", value: niceName, descriptionText: descriptionText)
+    if (niceName != "LiveTV") sendEvent(name: "channelDesc", value: "[none]")
     
     state.lastApp = niceName
     
