@@ -73,7 +73,6 @@ metadata {
         command "setIcon", ["string", "string"]
         command "clearIcons"
         
-		attribute "input", "string"        
         attribute "availableInputs", "list"
 		
 		attribute "channelDesc", "string"
@@ -301,12 +300,18 @@ def sendJson(String json) {
 }
 
 def sendPowerEvent(String onOrOff, String type = "digital") {
-	state.power = onOrOff
     def descriptionText = "${device.displayName} is ${onOrOff}"
-    log_info "${descriptionText} [$type]" 
-    sendEvent(name: "switch", value: onOrOff, descriptionText: descriptionText, unit: unit, type: type)
+    if (state.power != onOrOff) log_info "${descriptionText} [$type]" 
+    
+	state.power = onOrOff
+    sendEvent(name: "switch", value: onOrOff, descriptionText: descriptionText, type: type)
     if (type == "physical")
-        sendEvent(name: "power", value: onOrOff, descriptionText: descriptionText, unit: unit, type: type)
+        sendEvent(name: "power", value: onOrOff, descriptionText: descriptionText, type: type)
+    
+    if ((onOrOff == "off") && (type == "physical")) {
+        sendEvent(name: "channelDesc", value: "[off]", descriptionText: descriptionText)
+        sendEvent(name: "channelName", value: "[off]", descriptionText: descriptionText)
+    }
 }
 
 def initialize() {
@@ -371,7 +376,7 @@ def webSocketStatus(String status){
 	else if (status == "status: closing"){
 		log_debug("WebSocket connection closing.")
 		unschedule()
-		if (state.webSocket == ' lize') {
+		if (state.webSocket == 'initialize') {
 			log_warn("Ignoring WebSocket close due to initialization.")
 		} else {
 			if (state.power == "on") {                
