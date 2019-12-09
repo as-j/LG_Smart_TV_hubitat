@@ -1,5 +1,5 @@
 /**
- *  LG Smart TV Device Type
+ *  LG WebOs TV Device Type
  *
  * ImportURL: https://raw.githubusercontent.com/as-j/LG_Smart_TV_hubitat/master/LG_WebOS_TV_Driver.groovy
  *
@@ -38,7 +38,7 @@
  *
 ***See Release Notes at the bottom***
 ***********************************************************************************************************************/
-public static String version()      {  return "v0.2.5"  }
+public static String version()      {  return "v0.3.0"  }
 
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
@@ -222,10 +222,7 @@ def webosRegister() {
             if (pKey != null) {
                 log_debug("parseWebsocketResult: received registered client-key: ${pKey}")
                 state.pairingKey = pKey
-                settings.pairingKey = pKey
                 device.updateSetting("pairingKey",[type:"text", value:"${pKey}"])
-                pairingKey = pKey
-                setPaired(true)
                 // Hello doesn't seem to do anything?
                 if (!state.deviceInfo) runInMillis(10, sendHello)
                 if (!state.televisionModel) runInMillis(25, sendRequestInfo)
@@ -277,7 +274,7 @@ def refreshInputList() {
 
 def getMouseChild() {
     try {
-        log_info "LG_TV_Mouse_${televisionIp}"
+        log_debug "LG_TV_Mouse_${televisionIp}"
         def mouseDev = getChildDevice("LG_TV_Mouse_${televisionIp}")
         if(!mouseDev) mouseDev = addChildDevice("asj", "LG Mouse WebSocket Driver", "LG_TV_Mouse_${televisionIp}")
         return mouseDev
@@ -303,12 +300,6 @@ def sendJson(String json) {
     sendCommand(json);
 }
 
-def setPower(boolean newState) {
-    log_info "setPower() newState $newState oldState: ${state.power}"
-	state.power = newState
-	log_debug("setPower: setting state.power = " + (newState ? "ON":"OFF"))
-}
-
 def sendPowerEvent(String onOrOff, String type = "digital") {
 	state.power = onOrOff
     def descriptionText = "${device.displayName} is ${onOrOff}"
@@ -318,28 +309,25 @@ def sendPowerEvent(String onOrOff, String type = "digital") {
         sendEvent(name: "power", value: onOrOff, descriptionText: descriptionText, unit: unit, type: type)
 }
 
-def setPaired(boolean newState) {
-	state.paired = newState
-	log_debug("setPaired: setting state.paired = " + (newState ? "TRUE":"FALSE"))
-}
-
-def initialize()
-
-{
+def initialize() {
     log_info("LG Smart TV Driver - initialize - ip: ${televisionIp}  mac: ${televisionMac}  key: ${pairingKey} debug: ${debug} logText: ${descriptionText}")
     log_debug("LG Smart TV Driver - initialize - settings:" + settings.inspect())
-    
+
+    // Websocket has closed/errored, erase all callbacks
     callbacks = [:]
     
+    // Set some basic state, clear channel info
     state.sequenceNumber = 1
 	state.lastChannel = [:]
-    setPaired(false)
     state.pairFailCount = 0
+
+    // When reconnectPending is true it stops reconnectWebsocket 
+    // from rescheudling initialize()
     state.reconnectPending = false
-    setPower(false)
 	state.webSocket = "initialize"
-	unschedule()
- 
+
+    unschedule()
+    
     def mouseDev = getMouseChild()
 
     interfaces.webSocket.close()
@@ -359,6 +347,67 @@ def initialize()
     }
 }
 
+def webSocketStatus(String status){
+	//if (logEnable) log.debug "webSocketStatus- ${status}"
+	log_debug ("webSocketStatus: State: [${state.webSocket}]   Reported Status: [${status}]")
+
+	if(status.startsWith('failure: ')) {
+		log_debug("failure message from web socket ${status}")
+		if ((status == "failure: No route to host (Host unreachable)") || (status == "failure: connect timed out")  || status.startsWith("failure: Failed to connect") || status.startsWith("failure: sent ping but didn't receive pong")) {
+			log_debug("failure: No route/connect timeout/no pong for websocket protocol")
+			sendPowerEvent("off", "physical")
+		}
+		state.webSocket = "closed"
+		reconnectWebSocket()
+	} 
+	else if(status == 'status: open') {
+		log_info("websocket is open")
+		// success! reset reconnect delay
+        sendPowerEvent("on", "physical")
+		state.webSocket = "open"
+        webosRegister()
+        state.reconnectDelay = 2
+	} 
+	else if (status == "status: closing"){
+		log_debug("WebSocket connection closing.")
+		unschedule()
+		if (state.webSocket == ' lize') {
+			log_warn("Ignoring WebSocket close due to initialization.")
+		} else {
+			if (state.power == "on") {                
+				// TV should be on and reachable - try to reconnect
+				reconnectWebSocket(1)
+			} else {
+                reconnectWebSocket()
+            }
+        }
+        state.webSocket = "closed"
+	} else {
+		log_error "WebSocket error, reconnecting."
+		sendPowerEvent("off", "physical")
+		state.webSocket = "closed"
+		reconnectWebSocket()
+	}
+}
+
+def reconnectWebSocket(delay = null) {
+	// first delay is 2 seconds, doubles every time
+	if (state.reconnectPending == true) { 
+		log_debug("Rejecting additional reconnect request")
+		return
+	}
+    delay = delay ?: state.reconnectDelay
+    state.reconnectDelay = delay * 2
+    settings_retryDelay = settings.retryDelay.toInteger()
+    // don't let delay get too crazy, max it out at user setting
+    if (state.reconnectDelay > settings_retryDelay) state.reconnectDelay = settings_retryDelay
+
+	log_info("websocket reconnect - delay = ${delay}")
+	//If the TV is offline, give it some time before trying to reconnect
+	state.reconnectPending = true
+	runIn(delay, initialize)
+}
+
 def updated()
 {
     log_info "LG Smart TV Driver - updated - ip: ${settings.televisionIp}  mac: ${settings.televisionMac}  key: ${settings.pairingKey} debug: ${settings.logEnable} logText: ${settings.descriptionText}"
@@ -373,11 +422,11 @@ def logsStop(){
 
 def setParameters(String IP, String MAC, String TVTYPE, String KEY) {
 	log_info "LG Smart TV Driver - setParameters - ip: ${IP}  mac: ${MAC}  type: ${TVTYPE}  key: ${KEY}"
+    
 	state.televisionIp = IP
-	settings.televisionIp = IP
 	device.updateSetting("televisionIp",[type:"text", value:IP])
+    
 	state.televisionMac = MAC
-	settings.televisionMac = MAC
 	device.updateSetting("televisionMac",[type:"text", value:MAC])
 	log_debug("LG Smart TV Driver - Parameters SET- ip: ${televisionIp}  mac: ${televisionMac} key: ${pairingKey}")
 }
@@ -419,7 +468,6 @@ def parse(String description)
 			if (json?.error.take(3) == "403") {
 				// 403 error cancels the pairing process
 				pairingKey = ""
-				setPaired(false)
 				state.pairFailCount = state.pairFailCount ? state.pairFailCount + 1 : 1
 				log_info("parseWebsocketResult: received register_0 error: ${json.error} fail count: ${state.pairFailCount}")
 				if (state.pairFailCount < 6) { webosRegister() }
@@ -434,91 +482,15 @@ def parse(String description)
 	}
 }
 
-def webSocketStatus(String status){
-	//if (logEnable) log.debug "webSocketStatus- ${status}"
-	log_debug ("webSocketStatus: State: [${state.webSocket}]   Reported Status: [${status}]")
-
-	if(status.startsWith('failure: ')) {
-		log_debug("failure message from web socket ${status}")
-		setPaired(false)
-		if (state.power == false) { state.reconnectDelay = 30 }
-		if ((status == "failure: No route to host (Host unreachable)") || (status == "failure: connect timed out")  || status.startsWith("failure: Failed to connect") || status.startsWith("failure: sent ping but didn't receive pong")) {
-			log_debug("failure: No route/connect timeout/no pong for websocket protocol")
-			sendPowerEvent("off", "physical")
-			//retry every 60 seconds
-			state.reconnectDelay = 30
-		}
-		state.webSocket = "closed"
-		reconnectWebSocket()
-	} 
-	else if(status == 'status: open') {
-		log_info("websocket is open")
-		// success! reset reconnect delay
-        sendPowerEvent("on", "physical")
-		webosPollStatus()
-		state.reconnectDelay = 1
-		state.webSocket = "open"
-		if ((pairingKey == null) || (pairingKey == "")) {
-			webosRegister()
-		} else {
-			setPaired(true)
-			webosRegister()
-		}
-	} 
-	else if (status == "status: closing"){
-		log_debug("WebSocket connection closing.")
-		setPaired(false)
-		unschedule()
-		if (state.webSocket == 'initialize') {
-			log_warn("Ignoring WebSocket close due to initialization.")
-		} else {
-			if (state.power == true) {
-				// TV should be on and reachable - try to reconnect
-				reconnectWebSocket()
-			} else {
-				// We explicitly turned off the TV - reduce the reconnect time and try to reconnect every 60 seconds
-				state.reconnectDelay = 30
-				reconnectWebSocket()
-        	}
-		}
-		state.webSocket = "closed"
-	} 
-	else {
-		log_error "WebSocket error, reconnecting."
-		sendPowerEvent("off", "physical")
-		setPaired(false)
-		state.webSocket = "closed"
-		reconnectWebSocket()
-	}
-}
-
-def reconnectWebSocket() {
-	// first delay is 2 seconds, doubles every time
-	if (state.reconnectPending == true) { 
-		log_debug("Rejecting additional reconnect request")
-		return
-	}
-	state.reconnectDelay = (retryDelay ?: 60) as int
-//	state.reconnectDelay = (state.reconnectDelay ?: 1) * 2
-//	don't let delay get too crazy, max it out at 10 minutes
-	if(state.reconnectDelay > 600) state.reconnectDelay = 600
-	log_info("websocket reconnect - delay = ${state.reconnectDelay}")
-	//If the TV is offline, give it some time before trying to reconnect
-	state.reconnectPending = true
-	log_debug("Scheduling reconnect in ${state.reconnectDelay} seconds")
-	runIn(state.reconnectDelay, initialize)
-}
-
 def webosSubscribeToStatus() {
-	if (state.paired) {
-        sendWebosCommand(uri: 'audio/getStatus', type: 'subscribe', id: 'audio_getStatus')
-        sendWebosCommand(uri: 'com.webos.applicationManager/getForegroundAppInfo', type: 'subscribe', id: 'getForegroundAppInfo')
-        sendWebosCommand(uri: 'tv/getChannelProgramInfo', type: 'subscribe', id: 'getChannelProgramInfo')
-        //sendCommand('{"type":"subscribe","id":"status_%d","uri":"ssap://com.webos.applicationManager/getForegroundAppInfo"}')
-        //sendCommand('{"type":"subscribe","id":"status_%d","uri":"ssap://com.webos.service.tv.time/getCurrentTime"}')
-	}
+    sendWebosCommand(uri: 'audio/getStatus', type: 'subscribe', id: 'audio_getStatus')
+    sendWebosCommand(uri: 'com.webos.applicationManager/getForegroundAppInfo', type: 'subscribe', id: 'getForegroundAppInfo')
+    sendWebosCommand(uri: 'tv/getChannelProgramInfo', type: 'subscribe', id: 'getChannelProgramInfo')
+    //sendCommand('{"type":"subscribe","id":"status_%d","uri":"ssap://com.webos.applicationManager/getForegroundAppInfo"}')
+    sendCommand('{"type":"subscribe","id":"status_%d","uri":"ssap://com.webos.service.tv.time/getCurrentTime"}')
+
 	// schedule a poll every 10 minutes to help keep the websocket open			
-	runEvery10Minutes("webosPollStatus")
+	runEvery10Minutes("webosSubscribeToStatus")
 }
 
 def handler_audio_getStatus(data) {
@@ -583,11 +555,6 @@ def handler_getChannelProgramInfo(data) {
     sendEvent(name: "channelName", value: lastChannel.channelName)
 }
 
-def webosPollStatus() {
-    log_info "webosPollStatus - paired = ${state.paired} currentInput: ${this.currentInput}"
-    webosSubscribeToStatus()
-}
-
 def genericHandler(json) {
 	log_debug("genericHandler: got json: ${json}")
 }
@@ -615,7 +582,7 @@ def clearIcons() {
 }
 
 def notificationIcon(String notifyMessage, String icon_name) {
-    def base_url = "https://raw.githubusercontent.com/pasnox/oxygen-icons-png/master/oxygen/32x32/"
+    def base_url = "https://raw.githubusercontent.com/pasnox/oxygen-icons-png/master/oxygen/32x32"
     def icon_extention = "png"
     
     def full_uri = "${base_url}/${icon_name}.png"
@@ -661,12 +628,9 @@ def notificationIcon(String notifyMessage, String icon_name) {
 }
 
 def handleIconResponse(resp, data) {
-    log_info "handleIconResponse(): resp.status: ${resp.status} took: ${now() - data.start_time}ms"
-    
-    def svg_pic = resp.getData()
-    int n = resp.data.available()
+    int n = resp.data?.available()
+    log_info "handleIconResponse(): resp.status: ${resp.status} took: ${now() - data.start_time}ms size: $n"
 
-    log_debug "handleIconResponse(): message bytes $n"
     byte[] bytes = new byte[n]
     resp.data.read(bytes, 0, n)
     def base64String = bytes.encodeBase64().toString()
@@ -907,9 +871,9 @@ def sendWebosCommand(Map params)
 
 private void parseStatus(state, json) {
     def rResp = false
-    if ((state.power == false) && !(json?.payload?.subscribed == true)) {
+    if ((state.power == "off") && !(json?.payload?.subscribed == true)) {
         // when TV has indicated power off, do not process status messages unless they are subscriptions
-        log_warn("ignoring unsubscribed status updated during power off...")
+        log_warn("ignoring unsubscribed status updated during power off... message: $json")
         return
     }
 
