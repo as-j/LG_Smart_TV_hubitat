@@ -554,10 +554,10 @@ def handler_getChannelProgramInfo(data) {
     ]
     
     state.lastChannel = lastChannel
-    sendEvent(name: "channelDesc", value: lastChannel.channelDesc)
+    sendEvent(name: "channelDesc", value: lastChannel.description)
     // This is defined as a number, not a decimal so send the major number
     sendEvent(name: "channel", value: lastChannel.majorNumber)
-    sendEvent(name: "channelName", value: lastChannel.channelName)
+    sendEvent(name: "channelName", value: lastChannel.name)
 }
 
 def genericHandler(json) {
