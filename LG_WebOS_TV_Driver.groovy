@@ -72,6 +72,7 @@ metadata {
         command "notificationIcon", ["string", "string"]
         command "setIcon", ["string", "string"]
         command "clearIcons"
+        command "testWebSocketReply", ["string"]
         
         attribute "availableInputs", "list"
 		
@@ -98,7 +99,7 @@ metadata {
         //standard logging options
         input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: false
         input name: "logInfoEnable", type: "bool", title: "Enable info logging", defaultValue: false
-        input name: "txtEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: false
+        input name: "txtEnable", type: "bool", title: "Enable descriptionText logging from state changes", defaultValue: false
 
 
 	}
@@ -222,12 +223,13 @@ def webosRegister() {
                 log_debug("parseWebsocketResult: received registered client-key: ${pKey}")
                 state.pairingKey = pKey
                 device.updateSetting("pairingKey",[type:"text", value:"${pKey}"])
+                runInMillis(10, webosSubscribeToStatus)
+                runInMillis(25, getMouseURI)
                 // Hello doesn't seem to do anything?
-                if (!state.deviceInfo) runInMillis(10, sendHello)
-                if (!state.televisionModel) runInMillis(25, sendRequestInfo)
-                if (!state.nameToInputId) runInMillis(50, refreshInputList)                
-                runInMillis(75, webosSubscribeToStatus)
-                runInMillis(100, getMouseURI)
+                if (!state.deviceInfo) runInMillis(50, sendHello)
+                if (!state.televisionModel) runInMillis(75, sendRequestInfo)
+                if (!state.nameToInputId) runInMillis(100, refreshInputList)                
+                if (!state.serviceList) runInMillis(125, getServiceList)
 
             }
             return true
@@ -262,13 +264,26 @@ def refreshInputList() {
         def inputList = []
         def nameToInputId = [:]
         json?.payload?.launchPoints.each { app ->
-            //log_debug "App Name: ${app.title} System App: ${app.systemApp} ID: ${app.id}"
+            log_debug("App Name: ${app.title} App: ${app}")
             inputList += app.title
             nameToInputId[app.title] = app.id
         }
         state.nameToInputId = nameToInputId
-        sendEvent(name: "availableInputs", value: inputList);
+        state.inputList = inputList
+        sendWebosCommand(uri: 'tv/getExternalInputList', callback: { jsonExt ->
+            jsonExt?.payload?.devices?.each { device ->
+                log_debug("Found: ${device?.label} $device")
+                inputList += device.label
+                nameToInputId[device.label] = device.appId
+            }
+            state.nameToInputId = nameToInputId
+            state.inputList = inputList
+            log_info("Inputs: ${state.inputList}")
+            sendEvent(name: "availableInputs", value: inputList);
+        })
     })
+
+
 }
 
 def getMouseChild() {
@@ -436,6 +451,10 @@ def setParameters(String IP, String MAC, String TVTYPE, String KEY) {
 	log_debug("LG Smart TV Driver - Parameters SET- ip: ${televisionIp}  mac: ${televisionMac} key: ${pairingKey}")
 }
 
+def testWebSocketReply(String data) {
+    parse(data)
+}
+
 // parse events into attributes
 def parse(String description) 
 {
@@ -495,18 +514,41 @@ def webosSubscribeToStatus() {
     sendCommand('{"type":"subscribe","id":"status_%d","uri":"ssap://com.webos.service.tv.time/getCurrentTime"}')
 
 	// schedule a poll every 10 minutes to help keep the websocket open			
-	runEvery10Minutes("webosSubscribeToStatus")
+	// runEvery10Minutes("webosSubscribeToStatus")
+}
+
+def getServiceList() {
+    state.remove('serviceList')
+    state.serviceList = []
+    sendWebosCommand(uri: 'api/getServiceList', callback: { json ->
+        log_debug("getServiceList: ${json?.payload}")
+        json?.payload?.services.each { service ->
+            state.serviceList << service?.name
+        }
+        log_debug("Services: ${state.serviceList}")
+    })
 }
 
 def handler_audio_getStatus(data) {
     log_debug("handler_audio_getStatus: got: $data")
     def descriptionText = "${device.displayName} volume is ${data.volume}"
-    if (txtEnabled) log_info "${descriptionText}" 
+    if (txtEnable) log_info "${descriptionText}" 
     sendEvent(name: "volume", value: data.volume, descriptionText: descriptionText)
 }
 
 def handler_getForegroundAppInfo(data) {
     log_debug("handler_getForegroundAppInfo: got: $data")
+    
+    // Some TVs send this message when powering off
+    // data: [subscribed:true, appId:, returnValue:true, windowId:, processId:]
+    if (!data.appId && !data.processId) {
+        sendPowerEvent("off", "physical")
+        sendEvent(name: "channelDesc", value: "")
+        sendEvent(name: "channelName", value: "")
+        sendEvent(name: "input", value: "")
+        log_info("Received POWER DOWN notification.")
+        return
+    }
     
     def appId = data.appId
     def niceName = appId
@@ -515,7 +557,7 @@ def handler_getForegroundAppInfo(data) {
     }
     
     def descriptionText = "${device.displayName} channelName is ${niceName}"
-    if (txtEnabled) log_info "${descriptionText}" 
+    if (txtEnable) log_info "${descriptionText}" 
     sendEvent(name: "channelName", value: niceName, descriptionText: descriptionText)
     if (niceName != "LiveTV") sendEvent(name: "channelDesc", value: "[none]")
     
@@ -557,8 +599,13 @@ def handler_getChannelProgramInfo(data) {
     state.lastChannel = lastChannel
     sendEvent(name: "channelDesc", value: lastChannel.description)
     // This is defined as a number, not a decimal so send the major number
+    def descriptionText = "${device.displayName} full channel number is ${lastChannel.majorNumber}-${lastChannel.minorNumber}"
     sendEvent(name: "channel", value: lastChannel.majorNumber)
-    sendEvent(name: "channelName", value: lastChannel.name)
+    if (txtEnable) log_info "${descriptionText}" 
+    
+    descriptionText = "${device.displayName} channelName is ${lastChannel.name}"
+    sendEvent(name: "channelName", value: lastChannel.name, descriptionText: descriptionText)
+    if (txtEnable) log_info "${descriptionText}" 
 }
 
 def genericHandler(json) {
@@ -709,7 +756,7 @@ def setLevel(level) { setVolume(level) }
 
 def sendMuteEvent(muted) {
     def descriptionText = "${device.displayName} mute is ${muted}"
-    if (txtEnabled) log_info "${descriptionText}" 
+    if (txtEnable) log_info "${descriptionText}" 
     sendEvent(name: "mute", value: muted, descriptionText: descriptionText)
 }
 
@@ -793,21 +840,6 @@ def home()
 {
     log_debug("OLD Inputs: ${state.inputList} total length: ${state.toString().length()}")
 
-    state.remove('inputList')
-    state.inputList = []
-    state.inputListStr = ""
-    sendWebosCommand(uri: 'tv/getExternalInputList', callback: { json ->
-        json?.payload?.devices?.each { device ->
-            log_debug("Found: ${device?.label} $device")
-            if (device?.label && (device?.favorite || device?.connected)) {
-                state.inputList << ["${device.label}": device.appId]
-                if (state.inputListStr != "") state.inputListStr = ", "
-                state.inputListStr += device.local
-            }
-        }
-        log_debug("Inputs: ${state.inputList}")
-    })
-
     state.remove('serviceList')
     state.serviceList = []
     sendWebosCommand(uri: 'api/getServiceList', callback: { json ->
@@ -815,18 +847,7 @@ def home()
         json?.payload?.services.each { service ->
             state.serviceList << service?.name
         }
-        log_debug("Services: ${state.serviceList}")
-    })
-    sendWebosCommand(uri: 'com.webos.applicationManager/listLaunchPoints', callback: { json->
-        log_debug("listLaunchPoints: ${json?.payload}")
-    })
-    /* Insuficient perms to call listLaunchPoints
-    sendWebosCommand(uri: 'com.webos.service.update/getCurrentSWInformation', callback: {
-        log_debug("getCurrentSWInfo: ${it}")
-    })
-*/
-    sendWebosCommand(uri: 'com.webos.applicationManager/listLaunchPoints', callback: {
-        log_debug("listLaunchPoints: ${it}")
+        log_info("Services: ${state.serviceList}")
     })
 }
 
