@@ -13,6 +13,8 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  *  Original Author: Andrew Stanley-Jones
+ *
+  *  Added ImportURL: Dan G Ogorchock, 12/7/2019
  * 
  */
 
@@ -23,7 +25,7 @@ metadata {
         name: "LG Mouse WebSocket Driver",
         namespace: "asj",
         author: "asj",
-        importUrl: ""
+        importUrl: "https://raw.githubusercontent.com/as-j/LG_Smart_TV_hubitat/master/LG_WebOS_TV_Mouse.driver"
     ) {        
         command "setMouseURI", ["string"]
         command "getURI"

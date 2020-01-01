@@ -35,6 +35,7 @@
  *  Modified to support WebOS SSAP protocol: Cybrmage, 7/18/2019
  *    portions of the websocket code modified from the Logitech Harmony plugin by Dan G Ogorchock 
  *  Refactoring of callbacks, removed hand rolled json: asj, 9/18/2019
+ *  Added ImportURL: Dan G Ogorchock, 12/7/2019
  *
 ***See Release Notes at the bottom***
 ***********************************************************************************************************************/
@@ -45,7 +46,7 @@ import groovy.json.JsonOutput
 import groovy.transform.Field
 
 metadata {
-	definition (name: "LG WebOS TV", namespace: "asj", author: "Andrew Stanley-Jones")
+	definition (name: "LG WebOS TV", namespace: "asj", author: "Andrew Stanley-Jones", importUrl: "https://raw.githubusercontent.com/as-j/LG_Smart_TV_hubitat/master/LG_WebOS_TV_Driver.groovy")
 	{
 		capability "Initialize"
 		capability "TV"
