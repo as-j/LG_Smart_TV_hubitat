@@ -314,7 +314,7 @@ def sendJson(String json) {
     sendCommand(json);
 }
 
-def sendPowerEvent(String onOrOff, String type = "digital") {
+def powerEvent(String onOrOff, String type = "digital") {
     def descriptionText = "${device.displayName} is ${onOrOff}"
     if (state.power != onOrOff) log_info "${descriptionText} [$type]" 
     
@@ -326,6 +326,9 @@ def sendPowerEvent(String onOrOff, String type = "digital") {
     if ((onOrOff == "off") && (type == "physical")) {
         sendEvent(name: "channelDesc", value: "[off]", descriptionText: descriptionText)
         sendEvent(name: "channelName", value: "[off]", descriptionText: descriptionText)
+        sendEvent(name: "input", value: "[off]", descriptionText: descriptionText)
+        // Socket status should follow the system reported status
+        interfaces.webSocket.close()
     }
 }
 
@@ -375,7 +378,7 @@ def webSocketStatus(String status){
 		log_debug("failure message from web socket ${status}")
 		if ((status == "failure: No route to host (Host unreachable)") || (status == "failure: connect timed out")  || status.startsWith("failure: Failed to connect") || status.startsWith("failure: sent ping but didn't receive pong")) {
 			log_debug("failure: No route/connect timeout/no pong for websocket protocol")
-			sendPowerEvent("off", "physical")
+			powerEvent("off", "physical")
 		}
 		state.webSocket = "closed"
 		reconnectWebSocket()
@@ -383,7 +386,7 @@ def webSocketStatus(String status){
 	else if(status == 'status: open') {
 		log_info("websocket is open")
 		// success! reset reconnect delay
-        sendPowerEvent("on", "physical")
+        powerEvent("on", "physical")
 		state.webSocket = "open"
         webosRegister()
         state.reconnectDelay = 2
@@ -404,7 +407,7 @@ def webSocketStatus(String status){
         state.webSocket = "closed"
 	} else {
 		log_error "WebSocket error, reconnecting."
-		sendPowerEvent("off", "physical")
+		powerEvent("off", "physical")
 		state.webSocket = "closed"
 		reconnectWebSocket()
 	}
@@ -459,7 +462,7 @@ def testWebSocketReply(String data) {
 def parse(String description) 
 {
     // parse method is shared between HTTP and Websocket implementations
-	log_debug("parseWebsocketResult: $description")
+	log_debug("parse: $description")
 	def json = null
     try{
         json = new JsonSlurper().parseText(description)
@@ -478,7 +481,7 @@ def parse(String description)
     } else if (this."handler_${json.type}") {
         this."handler_${json.type}"(json.payload)
     } else if (callbacks[json.id]) {
-        log_debug("parseWebsocketResult: callback for json.id: " + json.id)
+        log_debug("parse: callback for json.id: " + json.id)
         callbacks[json.id].delegate = this
         callbacks[json.id].resolveStrategy = Closure.DELEGATE_FIRST
         def done = callbacks[json.id].call(json)
@@ -493,12 +496,12 @@ def parse(String description)
 				// 403 error cancels the pairing process
 				pairingKey = ""
 				state.pairFailCount = state.pairFailCount ? state.pairFailCount + 1 : 1
-				log_info("parseWebsocketResult: received register_0 error: ${json.error} fail count: ${state.pairFailCount}")
+				log_info("parse: received register_0 error: ${json.error} fail count: ${state.pairFailCount}")
 				if (state.pairFailCount < 6) { webosRegister() }
 			}
 		} else {
 			if (json?.error.take(3) == "401") {
-				log_info("parseWebsocketResult: received error: ${json.error}")
+				log_info("parse: received error: ${json.error}")
 				//if (state.registerPending == false) { webosRegister() }
 				//webosRegister()
 			}
@@ -541,11 +544,9 @@ def handler_getForegroundAppInfo(data) {
     
     // Some TVs send this message when powering off
     // data: [subscribed:true, appId:, returnValue:true, windowId:, processId:]
+    // json for testing: {"type":"response","id":"getForegroundAppInfo","payload":{"subscribed":true,"appId":"","returnValue":true,"windowId":"","processId":""}}
     if (!data.appId && !data.processId) {
-        sendPowerEvent("off", "physical")
-        sendEvent(name: "channelDesc", value: "")
-        sendEvent(name: "channelName", value: "")
-        sendEvent(name: "input", value: "")
+        powerEvent("off", "physical")
         log_info("Received POWER DOWN notification.")
         return
     }
@@ -696,7 +697,7 @@ def handleIconResponse(resp, data) {
 def on()
 {
 	log_info "on(): Executing 'Power On'"
-	sendPowerEvent("on")
+	powerEvent("on")
     def mac = settings.televisionMac ?: state.televisionMac
     if (!mac) {
         log_error "No mac address know for TV, can't send wake on lan"
@@ -716,7 +717,7 @@ def on()
 def off()
 {
 	log_info "off(): Executing 'Power Off'"
-	sendPowerEvent("off")
+	powerEvent("off")
 
     sendWebosCommand(uri: 'system/turnOff')
 }
@@ -911,10 +912,7 @@ private void parseStatus(state, json) {
             if (description.contains("appId") && description.contains("windowId") && description.contains("processId")) {
                 if ((json?.payload?.appId == null) || (json?.payload?.appId == "")) {
                     // The TV is powering off - change the power state, but leave the websocket to time out
-                    sendPowerEvent("off", "physical")
-                    sendEvent(name: "channelDesc", value: "")
-                    sendEvent(name: "channelName", value: "")
-                    sendEvent(name: "input", value: "")
+                    powerEvent("off", "physical")
                     log_info("Received POWER DOWN notification.")
                 }
             }
