@@ -362,8 +362,8 @@ def initialize() {
     }
 
     try {
-        log_debug("Connecting websocket to: \"ws://${televisionIp}:3000/\"")
-        interfaces.webSocket.connect("ws://${televisionIp}:3000/")
+        log_debug("Connecting websocket to: \"wss://${televisionIp}:3001/\"")
+        interfaces.webSocket.connect("wss://${televisionIp}:3001/", ignoreSSLIssues: true)
     } catch(e) {
         //if (logEnable) log.debug "initialize error: ${e.message}"
         log_warn "initialize error: ${e.message}"

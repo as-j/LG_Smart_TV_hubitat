@@ -159,7 +159,7 @@ def reconnect(new_uri = null) {
     close()
     try {
         if (logEnable) log.debug "Pointer Connecting to: ${state.uri}"
-        interfaces.webSocket.connect(state.uri)
+        interfaces.webSocket.connect(state.uri, ignoreSSLIssues: true)
         state.socketStatus = "opening"
     } catch (e) {
         log.info "Failed to open mouse socket: $e"
@@ -239,4 +239,3 @@ def yellow() {
 def green() {
     sendButton("GREEN")
 }
-
